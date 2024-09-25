@@ -39,21 +39,23 @@ export default class extends ServerEntry<Env> {
 							import("./routes/layout.js", {
 								with: { type: "react-worker" },
 							}),
-					},
-					{
-						index: true,
-						cache: true,
-						import: () =>
-							import("./routes/login.js", {
-								with: { type: "react-worker" },
-							}),
-					},
-					{
-						path: "/profile",
-						import: () =>
-							import("./routes/profile.js", {
-								with: { type: "react-worker" },
-							}),
+						children: [
+							{
+								index: true,
+								cache: true,
+								import: () =>
+									import("./routes/login.js", {
+										with: { type: "react-worker" },
+									}),
+							},
+							{
+								path: "/profile",
+								import: () =>
+									import("./routes/profile.js", {
+										with: { type: "react-worker" },
+									}),
+							},
+						],
 					},
 				],
 			},

@@ -1,4 +1,5 @@
-// I'm a login route. I'm responsible for authenticating a user and setting a cookie to remember them.
+// I'm a login route. I'm responsible for authenticating a user and setting a cookie
+// to remember them.
 
 "use worker";
 

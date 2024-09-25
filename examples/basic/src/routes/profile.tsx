@@ -2,17 +2,19 @@
 // I use a durable object to cache the user's profile and persist for fast retrieval
 // instead of interacting directly with the database from a worker.
 
-import type { Environment } from "framework";
+import type { EnvironmentKeys, PartialEnvironment } from "framework";
 import { assert, getAction, getContext } from "framework";
 import { Durable } from "framework/cloudflare";
 
 import type { DatabaseDurable, Profile } from "~/db.js";
 import { validateProfileInput } from "~/lib.js";
 
+export const environment = ["DB", "PROFILE"] as const satisfies EnvironmentKeys;
+
 // I execute on the eyeball worker before delegating the request to the
 // service binding for this route.
 export function eyeball() {
-	const c = getContext();
+	const c = getContext<typeof environment>();
 
 	const userId = c.cookie.get("userId");
 	if (!userId) {
@@ -23,7 +25,7 @@ export function eyeball() {
 export default async function ProfileRoute() {
 	// Get the state of the updateProfile action.
 	const updateProfile = getAction(updateProfileAction);
-	const c = getContext();
+	const c = getContext<typeof environment>();
 
 	const userId = c.cookie.get("userId", true);
 	const durable = c.env.PROFILE.get(c.env.PROFILE.idFromName(userId));
@@ -60,7 +62,7 @@ export default async function ProfileRoute() {
 async function logoutAction() {
 	"use server";
 
-	const c = getContext();
+	const c = getContext<typeof environment>();
 	c.cookie.unset("userId");
 	throw c.redirect("/");
 }
@@ -69,7 +71,7 @@ async function logoutAction() {
 async function updateProfileAction(formData: FormData) {
 	"use server";
 
-	const c = getContext();
+	const c = getContext<typeof environment>();
 
 	const userId = c.cookie.get("userId", true);
 	const durable = c.env.PROFILE.get(c.env.PROFILE.idFromName(userId));
@@ -81,11 +83,17 @@ async function updateProfileAction(formData: FormData) {
 }
 
 // I'm a durable object that caches and persists a user's profile for fast retrieval.
-export class ProfileDurable extends Durable<"PROFILE"> {
+export class ProfileDurable extends Durable<
+	"PROFILE",
+	PartialEnvironment<typeof environment>
+> {
 	private db: DurableObjectStub<DatabaseDurable>;
 	private profile: Profile | undefined = undefined;
 
-	constructor(ctx: DurableObjectState, env: Environment) {
+	constructor(
+		ctx: DurableObjectState,
+		env: PartialEnvironment<typeof environment>,
+	) {
 		super(ctx, env);
 
 		this.db = env.DB.get(env.DB.idFromName(""));

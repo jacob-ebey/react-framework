@@ -12,9 +12,6 @@ export interface NeutralServerEntry {
 	fetch(request: Request): Response | Promise<Response>;
 }
 
-// biome-ignore lint/suspicious/noEmptyInterface: needed for type merging is userland.
-export interface Environment {}
-
 export abstract class ServerEntry<Env = Environment>
 	implements NeutralServerEntry
 {
@@ -25,15 +22,29 @@ export abstract class ServerEntry<Env = Environment>
 	abstract fetch(request: Request): Response | Promise<Response>;
 }
 
-export type Context = ExecutionContext & {
-	env: Environment;
-	cookie: Cookie;
-	redirect(to: To): never;
+// biome-ignore lint/suspicious/noEmptyInterface: needed for type merging is userland.
+export interface Environment {}
+
+export type EnvironmentKeys = readonly [...(keyof Environment)];
+
+export type PartialEnvironment<
+	Keys extends readonly [...(keyof Environment)] = EnvironmentKeys,
+> = {
+	[K in Keys[number]]: K extends keyof Environment ? Environment[K] : never;
 };
+
+export type Context<Env extends Partial<Environment> = Environment> =
+	ExecutionContext & {
+		env: Env;
+		cookie: Cookie;
+		redirect(to: To): never;
+	};
 
 const ContextStorage = new AsyncLocalStorage<Context>();
 
-export function getContext(): Context {
+export function getContext<
+	Keys extends readonly [...(keyof Environment)] = EnvironmentKeys,
+>(): Context<PartialEnvironment<Keys>> {
 	const c = ContextStorage.getStore();
 	assert(c, "No context available.");
 	return c;

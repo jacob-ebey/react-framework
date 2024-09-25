@@ -1,14 +1,17 @@
 // I'm a login route. I'm responsible for authenticating a user and setting a cookie
 // to remember them.
 
+import type { EnvironmentKeys } from "framework";
 import { getAction, getContext } from "framework";
 
 import { validateLoginInput } from "~/lib.js";
 
+export const environment = ["DB"] as const satisfies EnvironmentKeys;
+
 // I execute on the eyeball worker before delegating the request to the
 // service binding for this route.
 export function eyeball() {
-	const c = getContext();
+	const c = getContext<typeof environment>();
 
 	const userId = c.cookie.get("userId");
 	if (userId) {
@@ -44,7 +47,7 @@ async function loginAction(formData: FormData) {
 	"use server";
 
 	// Get the current request context.
-	const c = getContext();
+	const c = getContext<typeof environment>();
 	const input = await validateLoginInput(formData);
 	if (!input.valid) return "Invalid email or password.";
 

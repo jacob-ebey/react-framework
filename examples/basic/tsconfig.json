@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "types": ["@cloudflare/workers-types", "react/canary"],
+    "jsx": "react-jsx",
+    "rootDir": ".",
+    "paths": {
+      "~/*": ["./src/*"]
+    }
+  }
+}

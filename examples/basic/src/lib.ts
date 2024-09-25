@@ -1,3 +1,6 @@
+// I contain some general functions to make the rest of this example easier to read. I'm not a part of the
+// the disign of the framework or a good example of how to do things.
+
 import { LoginInput, ProfileInput } from "~/db.js";
 
 export type Validated<T> =

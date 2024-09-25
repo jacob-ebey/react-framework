@@ -31,12 +31,18 @@ export default class extends ServerEntry<Env> {
 	fetch(request: Request) {
 		return handleRequest(request, this.env, this.ctx, [
 			{
-				cache: true,
 				import: () => import("./global-shell.js"),
 				children: [
 					{
+						cache: true,
+						import: () =>
+							import("./routes/layout.js", {
+								with: { type: "react-worker" },
+							}),
+					},
+					{
 						index: true,
-						cache: "get",
+						cache: true,
 						import: () =>
 							import("./routes/login.js", {
 								with: { type: "react-worker" },

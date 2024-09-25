@@ -8,13 +8,21 @@ sequenceDiagram
     Note over Eyeball: <Shell>
     Eyeball->>Browser: Begin HTML
     par
-        Eyeball->>Layout: binding.fetch()
-        Note over Layout: <LayoutRoute>
-        Layout->>Eyeball: RSC
+        alt is cached
+            Note over Eyeball: cache.get()
+        else not cached
+            Eyeball->>Layout: binding.fetch()
+            Note over Layout: <LayoutRoute>
+            Layout->>Eyeball: RSC
+        end
     and
-        Eyeball->>Index: binding.fetch()
-        Note over Index: <IndexRoute>
-        Index->>Eyeball: RSC
+        alt is cached
+            Note over Eyeball: cache.get()
+        else not cached
+            Eyeball->>Index: binding.fetch()
+            Note over Index: <IndexRoute>
+            Index->>Eyeball: RSC
+        end
     end
     Eyeball->>Browser: End HTML
 ```

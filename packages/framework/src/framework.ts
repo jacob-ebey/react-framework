@@ -1,7 +1,11 @@
+import { AsyncLocalStorage } from "node:async_hooks";
+
+// biome-ignore lint/suspicious/noExplicitAny: TODO - define RouteDefinition.
+type RouteDefinition = any;
+
 export interface ExecutionContext {
 	// biome-ignore lint/suspicious/noExplicitAny: better for everyone
 	waitUntil(promise: Promise<any>): void;
-	passThroughOnException(): void;
 }
 
 export interface NeutralServerEntry {
@@ -21,8 +25,19 @@ export abstract class ServerEntry<Env = Environment>
 	abstract fetch(request: Request): Response | Promise<Response>;
 }
 
-// biome-ignore lint/suspicious/noExplicitAny: TODO - define RouteDefinition.
-type RouteDefinition = any;
+export type Context = ExecutionContext & {
+	env: Environment;
+	cookie: Cookie;
+	redirect(to: To): never;
+};
+
+const ContextStorage = new AsyncLocalStorage<Context>();
+
+export function getContext(): Context {
+	const c = ContextStorage.getStore();
+	assert(c, "No context available.");
+	return c;
+}
 
 export async function handleRequest<
 	TypeSafeRoutes extends readonly RouteDefinition[],
@@ -32,7 +47,22 @@ export async function handleRequest<
 	ctx: ExecutionContext,
 	routes: TypeSafeRoutes,
 ): Promise<Response> {
-	return new Response("Hello, World!");
+	const cookie = {} as Cookie;
+	const redirect = (() => {
+		throw new Error("TODO: redirect() not implemented");
+	}) as unknown as Context["redirect"];
+
+	return ContextStorage.run(
+		{
+			cookie,
+			env,
+			redirect,
+			waitUntil: ctx.waitUntil.bind(ctx),
+		},
+		async () => {
+			return new Response("Hello, World!");
+		},
+	);
 }
 
 // biome-ignore lint/suspicious/noExplicitAny: needed for inference.
@@ -76,16 +106,6 @@ export type Cookie = {
 	): void;
 	unset<K extends keyof Cookies | keyof UnsignedCookies>(key: K): void;
 };
-
-export type Context = {
-	env: Environment;
-	cookie: Cookie;
-	redirect(to: To): never;
-};
-
-export function getContext(): Context {
-	return {} as unknown as Context;
-}
 
 export type ToObject = {
 	pathname: string;

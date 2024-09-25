@@ -14,7 +14,7 @@ export type ProfileInput = { displayName: string };
 
 export type User = { id: string };
 
-export class DatabaseDurable extends Durable<"DB"> {
+export class DatabaseDurable extends Durable<"DB", ["D1"]> {
 	status() {
 		return "ok";
 	}

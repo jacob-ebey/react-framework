@@ -83,10 +83,7 @@ async function updateProfileAction(formData: FormData) {
 }
 
 // I'm a durable object that caches and persists a user's profile for fast retrieval.
-export class ProfileDurable extends Durable<
-	"PROFILE",
-	PartialEnvironment<typeof environment>
-> {
+export class ProfileDurable extends Durable<"PROFILE", ["DB"]> {
 	private db: DurableObjectStub<DatabaseDurable>;
 	private profile: Profile | undefined = undefined;
 

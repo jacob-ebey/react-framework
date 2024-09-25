@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
-import type { Environment } from "framework";
+import type { EnvironmentKeys, PartialEnvironment } from "framework";
 
-export class Durable<
+export abstract class Durable<
 	Name extends string,
-	Env = Environment,
-> extends DurableObject<Env> {}
+	Keys extends EnvironmentKeys = EnvironmentKeys,
+> extends DurableObject<PartialEnvironment<Keys>> {}

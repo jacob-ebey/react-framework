@@ -26,3 +26,22 @@ sequenceDiagram
     end
     Eyeball->>Browser: End HTML
 ```
+
+```mermaid
+flowchart TD
+    Eyeball[Eyeball Worker]
+    DB[Database DruableObject]
+    D1[D1 Database]
+    Layout[Layout Worker]
+    Login[Login Worker]
+    Profile[Profile Worker]
+    ProfileDO[Profile DurableObject]
+
+    Eyeball o--o Layout
+    Eyeball o--o Login
+    Eyeball o--o Profile
+    Profile o--o ProfileDO
+    ProfileDO o--o DB
+    Login o--o DB
+    DB o--o D1
+```

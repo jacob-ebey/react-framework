@@ -5,6 +5,7 @@ import type { DatabaseDurable } from "./db.js";
 import type { ProfileDurable } from "./routes/profile.js";
 
 export interface Env {
+	D1: D1Database;
 	DB: DurableObjectNamespace<DatabaseDurable>;
 	PROFILE: DurableObjectNamespace<ProfileDurable>;
 }

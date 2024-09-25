@@ -1,10 +1,20 @@
 // I'm a login route. I'm responsible for authenticating a user and setting a cookie
 // to remember them.
 
-"use worker";
+import { getAction, getContext } from "framework";
 
-import { getAction, getContext } from "cf-framework";
 import { validateLoginInput } from "~/lib.js";
+
+// I execute on the eyeball worker before delegating the request to the
+// service binding for this route.
+export function eyeball() {
+	const c = getContext();
+
+	const userId = c.cookie.get("userId");
+	if (userId) {
+		throw c.redirect("/profile");
+	}
+}
 
 // A form action to log in a user.
 async function loginAction(formData: FormData) {
@@ -21,19 +31,13 @@ async function loginAction(formData: FormData) {
 	if (!user) return "Invalid email or password.";
 
 	// Set the user's ID in a signed cookie.
-	c.cookie.setSigned("userId", user.id);
+	c.cookie.set("userId", user.id);
 	throw c.redirect("/profile");
 }
 
 export default function LoginRoute() {
-	// Get the current request context.
-	const c = getContext();
 	// Get the state of the login action.
 	const login = getAction(loginAction);
-
-	if (c.cookie.get("userId")) {
-		c.redirect("/profile");
-	}
 
 	return (
 		<form action={login.action}>

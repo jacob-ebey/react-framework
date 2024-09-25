@@ -3,7 +3,7 @@
 	"name": "@example/basic",
 	"type": "module",
 	"dependencies": {
-		"cf-framework": "workspace:*"
+		"framework": "workspace:*"
 	},
 	"devDependencies": {
 		"@cloudflare/workers-types": "4.20240924.0",

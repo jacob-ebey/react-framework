@@ -2,19 +2,87 @@
 // I use a durable object to cache the user's profile and persist for fast retrieval
 // instead of interacting directly with the database from a worker.
 
-"use durable:profile";
+import type { Environment } from "framework";
+import { assert, getAction, getContext } from "framework";
+import { Durable } from "framework/cloudflare";
 
-import { DurableObject } from "cloudflare:workers";
-import type { DurableConfig, Environment } from "cf-framework";
-import { getAction, getContext, getDurable } from "cf-framework";
-import { assert } from "cf-framework/utils";
-
-import type { DB, Profile } from "~/db.js";
+import type { DatabaseDurable, Profile } from "~/db.js";
 import { validateProfileInput } from "~/lib.js";
 
-// The durable object that will be instantiated for each request.
-export class Durable extends DurableObject<Environment> {
-	private db: DurableObjectStub<DB>;
+// I execute on the eyeball worker before delegating the request to the
+// service binding for this route.
+export function eyeball() {
+	const c = getContext();
+
+	const userId = c.cookie.get("userId");
+	if (!userId) {
+		throw c.redirect("/");
+	}
+}
+
+export default async function ProfileRoute() {
+	// Get the state of the updateProfile action.
+	const updateProfile = getAction(updateProfileAction);
+	const c = getContext();
+
+	const userId = c.cookie.get("userId", true);
+	const durable = c.env.PROFILE.get(c.env.PROFILE.idFromName(userId));
+
+	// Get the user's profile using the durable object.
+	const profile = await durable.getProfile();
+	assert(profile);
+
+	return (
+		<div>
+			<form action={logoutAction}>
+				<button type="submit">Logout</button>
+			</form>
+			<form action={updateProfile.action}>
+				<label>
+					Display Name
+					<br />
+					<input
+						required
+						type="text"
+						name="displayName"
+						defaultValue={profile.displayName}
+					/>
+				</label>
+				<br />
+				<button type="submit">Save</button>
+				{!!updateProfile.data && <p>{updateProfile.data}</p>}
+			</form>
+		</div>
+	);
+}
+
+// A form action to log out a user.
+async function logoutAction() {
+	"use server";
+
+	const c = getContext();
+	c.cookie.unset("userId");
+	throw c.redirect("/");
+}
+
+// A form action to update the user's profile.
+async function updateProfileAction(formData: FormData) {
+	"use server";
+
+	const c = getContext();
+
+	const userId = c.cookie.get("userId", true);
+	const durable = c.env.PROFILE.get(c.env.PROFILE.idFromName(userId));
+
+	const input = validateProfileInput(formData);
+	if (!input.valid) return "Invalid profile";
+
+	await durable.updateProfile(input.data);
+}
+
+// I'm a durable object that caches and persists a user's profile for fast retrieval.
+export class ProfileDurable extends Durable<"PROFILE"> {
+	private db: DurableObjectStub<DatabaseDurable>;
 	private profile: Profile | undefined = undefined;
 
 	constructor(ctx: DurableObjectState, env: Environment) {
@@ -38,67 +106,4 @@ export class Durable extends DurableObject<Environment> {
 		// Persist the profile and save a local copy for future retrieval.
 		this.profile = await this.db.persistProfile(this.ctx.id.name, profile);
 	}
-}
-
-// How to instantiate the durable object.
-export function durable(): DurableConfig {
-	// Get the current request context.
-	const c = getContext();
-
-	// The ID of this durable object is the unique userID
-	const userId = c.cookie.getSigned("userId");
-	if (!userId) {
-		// If we don't have a userID, redirect to the login route
-		throw c.redirect("/");
-	}
-
-	return {
-		id: userId,
-		// place it as close to the user as possible
-		// locationHint: c.cf.colo,
-	};
-}
-
-// A form action to update the user's profile.
-async function updateProfileAction(formData: FormData) {
-	"use server";
-
-	// No need to validate authentication as the durable() function above can only
-	// succeed and create an instance if the user is authenticated.
-	const durable = getDurable<Durable>();
-
-	const input = validateProfileInput(formData);
-	if (!input.valid) return "Invalid profile";
-
-	await durable.updateProfile(input.data);
-}
-
-export default async function ProfileRoute() {
-	// Get the state of the updateProfile action.
-	const updateProfile = getAction(updateProfileAction);
-	// No need to validate authentication as the durable() function above can only
-	// succeed and create an instance if the user is authenticated.
-	const durable = getDurable<Durable>();
-
-	// Get the user's profile using the durable object.
-	const profile = await durable.getProfile();
-	assert(profile);
-
-	return (
-		<form>
-			<label>
-				Display Name
-				<br />
-				<input
-					required
-					type="text"
-					name="displayName"
-					defaultValue={profile.displayName}
-				/>
-			</label>
-			<br />
-			<button type="submit">Save</button>
-			{!!updateProfile.data && <p>{updateProfile.data}</p>}
-		</form>
-	);
 }

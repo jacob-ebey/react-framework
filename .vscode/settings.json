@@ -1,4 +1,7 @@
 {
 	"editor.defaultFormatter": "biomejs.biome",
-	"notebook.defaultFormatter": "biomejs.biome"
+	"notebook.defaultFormatter": "biomejs.biome",
+	"[markdown]": {
+		"editor.defaultFormatter": "esbenp.prettier-vscode"
+	}
 }

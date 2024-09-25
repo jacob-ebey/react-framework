@@ -1,5 +1,25 @@
+export interface ExecutionContext {
+	// biome-ignore lint/suspicious/noExplicitAny: better for everyone
+	waitUntil(promise: Promise<any>): void;
+	passThroughOnException(): void;
+}
+
+export interface NeutralServerEntry {
+	fetch(request: Request): Response | Promise<Response>;
+}
+
 // biome-ignore lint/suspicious/noEmptyInterface: needed for type merging is userland.
 export interface Environment {}
+
+export abstract class ServerEntry<Env = Environment>
+	implements NeutralServerEntry
+{
+	constructor(
+		protected ctx: ExecutionContext,
+		protected env: Env,
+	) {}
+	abstract fetch(request: Request): Response | Promise<Response>;
+}
 
 // biome-ignore lint/suspicious/noExplicitAny: TODO - define RouteDefinition.
 type RouteDefinition = any;
@@ -32,20 +52,29 @@ export function getAction<Func extends ActionFunction>(
 	};
 }
 
-export interface Cookies {
-	[key: string]: string;
-}
-export interface UnsignedCookies {
-	[key: string]: string;
-}
+// biome-ignore lint/suspicious/noEmptyInterface: needed for type merging is userland.
+export interface Cookies {}
+
+// biome-ignore lint/suspicious/noEmptyInterface: needed for type merging is userland.
+export interface UnsignedCookies {}
 
 export type Cookie = {
-	get<K extends keyof UnsignedCookies>(
+	get<K extends keyof Cookies>(key: K, required?: false): null | Cookies[K];
+	get<K extends keyof Cookies>(key: K, required: true): Cookies[K];
+	getUnsigned<K extends keyof UnsignedCookies>(
 		key: keyof UnsignedCookies,
+		required?: false,
 	): null | UnsignedCookies[K];
-	getSigned<K extends keyof Cookies>(key: K): null | Cookies[K];
-	set<K extends keyof UnsignedCookies>(key: K, value: UnsignedCookies[K]): void;
-	setSigned<K extends keyof Cookies>(key: K, value: Cookies[K]): void;
+	getUnsigned<K extends keyof UnsignedCookies>(
+		key: keyof UnsignedCookies,
+		required: true,
+	): UnsignedCookies[K];
+	set<K extends keyof Cookies>(key: K, value: Cookies[K]): void;
+	setUnsigned<K extends keyof UnsignedCookies>(
+		key: K,
+		value: UnsignedCookies[K],
+	): void;
+	unset<K extends keyof Cookies | keyof UnsignedCookies>(key: K): void;
 };
 
 export type Context = {
@@ -64,13 +93,8 @@ export type ToObject = {
 };
 export type To = string | ToObject;
 
-export type DurableConfig = {
-	id: string;
-	locationHint?: string;
-};
-
-export function getDurable<
-	T extends Rpc.DurableObjectBranded | undefined = undefined,
->(): DurableObjectStub<T> {
-	return {} as unknown as DurableObjectStub<T>;
+export function assert<T>(condition: T, message?: string): asserts condition {
+	if (!condition) {
+		throw new Error(message ?? "Assertion failed");
+	}
 }

@@ -4,7 +4,7 @@
 // state to be maintained across requests and accessible from multiple
 // workers / durable objects.
 
-import { DurableObject } from "cloudflare:workers";
+import { Durable } from "framework/cloudflare";
 
 export type LoginInput = { email: string; password: string };
 
@@ -14,19 +14,20 @@ export type ProfileInput = { displayName: string };
 
 export type User = { id: string };
 
-export class DB extends DurableObject {
-	async getProfile(userId: string): Promise<Profile> {
-		return { displayName: "John Doe" };
+export class DatabaseDurable extends Durable<"DB"> {
+	status() {
+		return "ok";
 	}
 
-	async loginUser(input: LoginInput): Promise<User> {
-		return { id: "123" };
+	getProfile(userId: string) {
+		return { displayName: "John Doe" } as Profile;
 	}
 
-	async persistProfile(
-		userId: string,
-		profile: ProfileInput,
-	): Promise<Profile> {
-		return { displayName: profile.displayName };
+	loginUser(input: LoginInput) {
+		return { id: "123" } as User;
+	}
+
+	persistProfile(userId: string, profile: ProfileInput) {
+		return { displayName: profile.displayName } as Profile;
 	}
 }

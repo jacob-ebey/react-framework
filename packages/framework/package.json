@@ -1,10 +1,10 @@
 {
 	"type": "module",
 	"version": "0.0.0",
-	"name": "cf-framework",
+	"name": "framework",
 	"exports": {
 		".": "./src/framework.ts",
-		"./utils": "./src/utils.ts",
+		"./cloudflare": "./src/cloudflare.ts",
 		"./package.json": "./package.json"
 	},
 	"devDependencies": {

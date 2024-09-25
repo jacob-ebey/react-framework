@@ -8,36 +8,53 @@
 // This is ultimately where we turn everything into HTML, and is also the location
 // to quickly send down a shell containing any necessary CSS or JS for the page.
 //
-// Any handler that is marked with `"use worker"` or `"use durable:<id>"` is
-// executed via a Cloudflare service binding. These handlers are in the React
-// "server" environment.
+// Import assertions are used to transform modules and make composing spatial compute
+// easy. Below, the "react-worker" type is used to transform the module into a
+// `{ fetch() }` object that invokes the appropriate service binding.
+//
+// Each "worker" and "react-worker" type creates a new worker entrypoint.
 
-import { type Environment, handleRequest } from "cf-framework";
+import { handleRequest, ServerEntry } from "framework";
 
-import type { DB } from "./db.js";
+import type { Env } from "./cloudflare.gen.js";
 
-declare module "cf-framework" {
-	interface Environment {
-		DB: DurableObjectNamespace<DB>;
+declare module "framework" {
+	export interface Cookies {
+		userId: string;
 	}
+
+	// In this example we pass through the cloudflare environment directly.
+	export interface Environment extends Env {}
 }
 
-export default {
-	fetch(request, env, ctx) {
-		return handleRequest(request, env, ctx, [
+export default class extends ServerEntry<Env> {
+	fetch(request: Request) {
+		return handleRequest(request, this.env, this.ctx, [
 			{
+				cache: true,
 				import: () => import("./global-shell.js"),
 				children: [
 					{
 						index: true,
-						import: () => import("./routes/login.js"),
+						cache: "get",
+						import: () =>
+							import("./routes/login.js", {
+								with: { type: "react-worker" },
+							}),
 					},
 					{
 						path: "/profile",
-						import: () => import("./routes/profile.js"),
+						import: () =>
+							import("./routes/profile.js", {
+								with: { type: "react-worker" },
+							}),
 					},
 				],
 			},
+			{
+				path: "/api/status",
+				import: () => import("./api/status.js"),
+			},
 		]);
-	},
-} satisfies ExportedHandler<Environment>;
+	}
+}

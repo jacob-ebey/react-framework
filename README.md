@@ -4,14 +4,26 @@ Entrypoint is a standard worker entrypoint exporting default an `ExportedHandler
 
 The `import` of each route config can either point to a module that contains a default export that is a React component, or a module that exports a `fetch()` handler that dispatches to another RSC server.
 
-## `use worker`
+## `class Durable<Name, Env>`
 
-Denotes a module as a unique worker entrypoint and a react-server context that runs as close as possible to the user.
+A class that extends and brands the cloudflare DurableObject class. It is used for discovery, type generation and deployment configuration.
+
+## `worker` Module
+
+Denotes a module as a unique worker entrypoint and a react-server context that runs as close as possible to the user and is executed through a service binding from the eyeball worker.
+
+### `function eyeball()`
+
+A function that executes on the eyeball worker before delegating the request to the service binding for this route.
+
+## `react-worker` Module
+
+Denotes a module as a unique worker entrypoint and a react-server context that runs as close as possible to the user and is executed through a service binding from the eyeball worker.
 
 This results in the module becoming an entrypoint in the "server" environment and resulting in a module that, in-concept, looks like:
 
 ```ts
-import { handleActions, renderToReadableStream } from "cf-framework/server";
+import { handleActions, renderToReadableStream } from "framework/server";
 import * as mod from "./path-to-use-worker-module";
 
 export default {
@@ -24,59 +36,4 @@ export default {
 } satisfies ExportedHandler;
 ```
 
-## `use durable:<id>`
-
-Denotes a module as a unique worker entrypoint and a react-server context that runs as close to the user as possible with a correlated durable object.
-
-This results in the module becoming an entrypoint in the "server" environment and resulting in a module that, in-concept, looks like:
-
-```ts
-import {
-  handleActions,
-  provideDurable,
-  renderToReadableStream,
-} from "cf-framework/server";
-import * as mod from "./path-to-use-worker-module";
-
-export default {
-  fetch(request, env, ctx) {
-    // Create an instance of the durable object provided by the module
-    return provideDurable(
-      "<durable_name>",
-      mod,
-      request,
-      env,
-      ctx,
-      async (durableInstance) => {
-        // Execute server actions.
-        const actionResults = await handleActions(
-          mod,
-          request,
-          env,
-          ctx,
-          durableInstance
-        );
-        // Render the app.
-        return renderToReadableStream(mod, request, env, ctx, actionResults);
-      }
-    );
-  },
-} satisfies ExportedHandler;
-```
-
-### `class Durable`
-
-A class that extends and implements the `DurableObject` from `cloudflare:workers`. This is the implementation of the durable object instance that is available through `getDurable()`.
-
-### `function durable()`
-
-A function that determines how to construct an instance of the Durable class. Has access to `getContext()`.
-
-**Returns**
-
-```ts
-type DurableConfig = {
-  id: string;
-  locationHint?: string;
-};
-```
+Can also contain an eyeball function that runs on the eyeball worker before delegating the request to the service binding for this route.

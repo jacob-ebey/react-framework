@@ -1,3 +1,10 @@
 {
-	"private": true
+	"private": true,
+	"scripts": {
+		"check": "npx @biomejs/biome check **/*",
+		"fix": "npx @biomejs/biome check --write **/*"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "1.9.2"
+	}
 }

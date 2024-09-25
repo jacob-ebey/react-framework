@@ -4,14 +4,14 @@
 // close to the user as possible.
 
 export default function GlobalShell({
-  children,
+	children,
 }: {
-  children?: React.ReactNode;
+	children?: React.ReactNode;
 }) {
-  return (
-    <html>
-      <head></head>
-      <body>{children}</body>
-    </html>
-  );
+	return (
+		<html lang="en">
+			<head />
+			<body>{children}</body>
+		</html>
+	);
 }

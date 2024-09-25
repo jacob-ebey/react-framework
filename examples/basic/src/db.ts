@@ -15,18 +15,18 @@ export type ProfileInput = { displayName: string };
 export type User = { id: string };
 
 export class DB extends DurableObject {
-  async getProfile(userId: string): Promise<Profile> {
-    return { displayName: "John Doe" };
-  }
+	async getProfile(userId: string): Promise<Profile> {
+		return { displayName: "John Doe" };
+	}
 
-  async loginUser(input: LoginInput): Promise<User> {
-    return { id: "123" };
-  }
+	async loginUser(input: LoginInput): Promise<User> {
+		return { id: "123" };
+	}
 
-  async persistProfile(
-    userId: string,
-    profile: ProfileInput
-  ): Promise<Profile> {
-    return { displayName: profile.displayName };
-  }
+	async persistProfile(
+		userId: string,
+		profile: ProfileInput,
+	): Promise<Profile> {
+		return { displayName: profile.displayName };
+	}
 }

@@ -1,13 +1,13 @@
 {
-  "private": true,
-  "name": "@example/basic",
-  "type": "module",
-  "dependencies": {
-    "cf-framework": "workspace:*"
-  },
-  "devDependencies": {
-    "@cloudflare/workers-types": "4.20240924.0",
-    "@types/react": "18.3.9",
-    "typescript": "5.6.2"
-  }
+	"private": true,
+	"name": "@example/basic",
+	"type": "module",
+	"dependencies": {
+		"cf-framework": "workspace:*"
+	},
+	"devDependencies": {
+		"@cloudflare/workers-types": "4.20240924.0",
+		"@types/react": "18.3.9",
+		"typescript": "5.6.2"
+	}
 }

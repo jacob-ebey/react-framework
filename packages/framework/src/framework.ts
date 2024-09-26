@@ -3,72 +3,70 @@ import { AsyncLocalStorage } from "node:async_hooks";
 // biome-ignore lint/suspicious/noExplicitAny: TODO - define RouteDefinition.
 type RouteDefinition = any;
 
-export interface ExecutionContext {
-	// biome-ignore lint/suspicious/noExplicitAny: better for everyone
-	waitUntil(promise: Promise<any>): void;
-}
-
 export interface NeutralServerEntry {
 	fetch(request: Request): Response | Promise<Response>;
-}
-
-export abstract class ServerEntry<Env = Environment>
-	implements NeutralServerEntry
-{
-	constructor(
-		protected ctx: ExecutionContext,
-		protected env: Env,
-	) {}
-	abstract fetch(request: Request): Response | Promise<Response>;
 }
 
 // biome-ignore lint/suspicious/noEmptyInterface: needed for type merging is userland.
 export interface Environment {}
 
-export type EnvironmentKeys = readonly [...(keyof Environment)];
+export type EnvironmentKeys = keyof Environment;
 
-export type PartialEnvironment<
-	Keys extends readonly [...(keyof Environment)] = EnvironmentKeys,
-> = {
-	[K in Keys[number]]: K extends keyof Environment ? Environment[K] : never;
+export abstract class ServerEntry<Keys extends EnvironmentKeys>
+	implements NeutralServerEntry
+{
+	env: PartialEnvironment<Keys>;
+	cookie: Cookie;
+	redirect: (to: To) => never;
+	// biome-ignore lint/suspicious/noExplicitAny: better for everyone
+	waitUntil: (promise: Promise<any>) => void;
+
+	constructor() {
+		const c = getContext<Keys>();
+		this.env = c.env;
+		this.cookie = c.cookie;
+		this.redirect = c.redirect;
+		this.waitUntil = c.waitUntil;
+	}
+	abstract fetch(request: Request): Response | Promise<Response>;
+}
+
+export type PartialEnvironment<Keys extends EnvironmentKeys> = {
+	[K in Keys]: K extends keyof Environment ? Environment[K] : never;
 };
 
-export type Context<Env extends Partial<Environment> = Environment> =
-	ExecutionContext & {
-		env: Env;
-		cookie: Cookie;
-		redirect(to: To): never;
-	};
+export type Context<Env extends Partial<Environment> = Environment> = {
+	env: Env;
+	cookie: Cookie;
+	redirect(to: To): never;
+	// biome-ignore lint/suspicious/noExplicitAny: better for everyone
+	waitUntil(promise: Promise<any>): void;
+};
 
-const ContextStorage = new AsyncLocalStorage<Context>();
+export const UNSAFE_ContextStorage = new AsyncLocalStorage<Context>();
 
-export function getContext<
-	Keys extends readonly [...(keyof Environment)] = EnvironmentKeys,
->(): Context<PartialEnvironment<Keys>> {
-	const c = ContextStorage.getStore();
+export function getContext<Keys extends EnvironmentKeys>(): Context<
+	PartialEnvironment<Keys>
+> {
+	const c = UNSAFE_ContextStorage.getStore();
 	assert(c, "No context available.");
-	return c;
+	return c as Context<PartialEnvironment<Keys>>;
 }
 
 export async function handleRequest<
 	TypeSafeRoutes extends readonly RouteDefinition[],
+	Keys extends EnvironmentKeys,
 >(
 	request: Request,
-	env: Environment,
-	ctx: ExecutionContext,
+	c: Context<PartialEnvironment<Keys>>,
 	routes: TypeSafeRoutes,
 ): Promise<Response> {
-	const cookie = {} as Cookie;
-	const redirect = (() => {
-		throw new Error("TODO: redirect() not implemented");
-	}) as unknown as Context["redirect"];
-
-	return ContextStorage.run(
+	return UNSAFE_ContextStorage.run(
 		{
-			cookie,
-			env,
-			redirect,
-			waitUntil: ctx.waitUntil.bind(ctx),
+			cookie: c.cookie,
+			env: c.env,
+			redirect: c.redirect,
+			waitUntil: c.waitUntil,
 		},
 		async () => {
 			return new Response("Hello, World!");

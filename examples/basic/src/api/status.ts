@@ -1,15 +1,14 @@
-import type { Environment, ExecutionContext } from "framework";
 import { ServerEntry } from "framework";
 
 import type { DatabaseDurable } from "~/db.js";
 
-export default class extends ServerEntry {
+export default class extends ServerEntry<"DB"> {
 	private db: DurableObjectStub<DatabaseDurable>;
 
-	constructor(ctx: ExecutionContext, env: Environment) {
-		super(ctx, env);
+	constructor() {
+		super();
 
-		this.db = env.DB.get(env.DB.idFromName(""));
+		this.db = this.env.DB.get(this.env.DB.idFromName(""));
 	}
 
 	async fetch() {

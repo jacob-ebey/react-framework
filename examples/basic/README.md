@@ -32,15 +32,18 @@ flowchart TD
     Eyeball[Eyeball Worker]
     DB[Database DruableObject]
     D1[D1 Database]
-    Layout[Layout Worker]
-    Login[Login Worker]
-    Profile[Profile Worker]
+    Layout[Layout Route Worker]
+    Login[Login Route Worker]
+    Profile[Profile Route Worker]
+    ProfileAPI[Profile API Route Worker]
     ProfileDO[Profile DurableObject]
 
     Eyeball o--o Layout
     Eyeball o--o Login
     Eyeball o--o Profile
+    Eyeball o--o ProfileAPI
     Profile o--o ProfileDO
+    ProfileAPI o--o ProfileDO
     ProfileDO o--o DB
     Login o--o DB
     DB o--o D1

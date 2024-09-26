@@ -14,6 +14,7 @@
 //
 // Each "worker" and "react-worker" type creates a new worker entrypoint.
 
+import type { EnvironmentKeys } from "framework";
 import { handleRequest, ServerEntry } from "framework";
 
 import type { Env } from "./cloudflare.gen.js";
@@ -27,9 +28,9 @@ declare module "framework" {
 	export interface Environment extends Env {}
 }
 
-export default class extends ServerEntry<Env> {
+export default class extends ServerEntry<EnvironmentKeys> {
 	fetch(request: Request) {
-		return handleRequest(request, this.env, this.ctx, [
+		return handleRequest(request, this, [
 			{
 				import: () => import("./global-shell.js"),
 				children: [
@@ -58,6 +59,13 @@ export default class extends ServerEntry<Env> {
 						],
 					},
 				],
+			},
+			{
+				path: "/api/profile",
+				import: () =>
+					import("./api/profile.js", {
+						with: { type: "worker" },
+					}),
 			},
 			{
 				path: "/api/status",

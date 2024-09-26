@@ -1,22 +1,22 @@
 // I'm a login route. I'm responsible for authenticating a user and setting a cookie
 // to remember them.
 
-import { getAction, getContext } from "framework";
+import { actionRedirect, getAction, getContext } from "framework";
 
 import { validateLoginInput } from "~/lib.js";
-
-export type Environment = "DB";
 
 // I execute on the eyeball worker before delegating the request to the
 // service binding for this route.
 export function eyeball() {
-	const c = getContext<Environment>();
+	const c = getContext();
 
 	const userId = c.cookie.get("userId");
 	if (userId) {
-		throw c.redirect("/profile");
+		return Response.redirect("/profile");
 	}
 }
+
+export type Environment = "DB";
 
 export default function LoginRoute() {
 	// Get the state of the login action.
@@ -57,5 +57,5 @@ async function loginAction(formData: FormData) {
 
 	// Set the user's ID in a signed cookie.
 	c.cookie.set("userId", user.id);
-	throw c.redirect("/profile");
+	actionRedirect("/profile");
 }

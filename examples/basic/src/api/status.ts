@@ -1,9 +1,10 @@
 import { ServerEntry } from "framework";
+import type { toDurableObjectStub } from "framework/cloudflare";
 
 import type { DatabaseDurable } from "~/db.js";
 
 export default class extends ServerEntry<"DB"> {
-	private db: DurableObjectStub<DatabaseDurable>;
+	private db: toDurableObjectStub<DatabaseDurable>;
 
 	constructor() {
 		super();

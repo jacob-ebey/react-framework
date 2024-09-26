@@ -12,60 +12,145 @@ export interface Environment {}
 
 export type EnvironmentKeys = keyof Environment;
 
-export abstract class ServerEntry<Keys extends EnvironmentKeys>
+export type BlockConcurrencyWhile = <T>(
+	callback: () => Promise<T>,
+) => Promise<T>;
+
+// biome-ignore lint/suspicious/noExplicitAny: better for everyone
+export type WaitUntil = (promise: Promise<any>) => void;
+
+export abstract class ServerEntry<Dependencies extends EnvironmentKeys>
 	implements NeutralServerEntry
 {
-	env: PartialEnvironment<Keys>;
+	env: PartialEnvironment<Dependencies>;
 	cookie: Cookie;
-	redirect: (to: To) => never;
-	// biome-ignore lint/suspicious/noExplicitAny: better for everyone
-	waitUntil: (promise: Promise<any>) => void;
+	waitUntil: WaitUntil;
 
 	constructor() {
-		const c = getContext<Keys>();
+		const c = getContext<Dependencies>();
+
 		this.env = c.env;
 		this.cookie = c.cookie;
-		this.redirect = c.redirect;
 		this.waitUntil = c.waitUntil;
 	}
 	abstract fetch(request: Request): Response | Promise<Response>;
 }
 
-export type PartialEnvironment<Keys extends EnvironmentKeys> = {
-	[K in Keys]: K extends keyof Environment ? Environment[K] : never;
+interface DurableId {
+	toString(): string;
+	readonly name?: string;
+}
+
+export abstract class Durable<
+	Name extends string,
+	Dependencies extends EnvironmentKeys,
+> {
+	blockConcurrencyWhile: BlockConcurrencyWhile;
+	env: PartialEnvironment<Dependencies>;
+	id: DurableId;
+	storage: Storage;
+	waitUntil: WaitUntil;
+
+	constructor() {
+		const c = UNSAFE_FrameworkContextStorage.getStore();
+		assert(c, "No context available.");
+		assert(c.blockConcurrencyWhile, "No blockConcurrencyWhile available.");
+		assert(c.durableId, "No durable ID available.");
+		assert(c.storage, "Storage not available.");
+
+		this.blockConcurrencyWhile = c.blockConcurrencyWhile;
+		this.env = c.env;
+		this.id = c.durableId;
+		this.storage = c.storage;
+		this.waitUntil = c.waitUntil;
+	}
+}
+
+export interface Storage {
+	get<T = unknown>(
+		key: string,
+		options?: DurableObjectGetOptions,
+	): Promise<T | undefined>;
+	get<T = unknown>(
+		keys: string[],
+		options?: DurableObjectGetOptions,
+	): Promise<Map<string, T>>;
+	list<T = unknown>(
+		options?: DurableObjectListOptions,
+	): Promise<Map<string, T>>;
+	put<T>(
+		key: string,
+		value: T,
+		options?: DurableObjectPutOptions,
+	): Promise<void>;
+	put<T>(
+		entries: Record<string, T>,
+		options?: DurableObjectPutOptions,
+	): Promise<void>;
+	delete(key: string, options?: DurableObjectPutOptions): Promise<boolean>;
+	delete(keys: string[], options?: DurableObjectPutOptions): Promise<number>;
+}
+
+export type PartialEnvironment<Dependencies extends EnvironmentKeys> = {
+	[K in Dependencies]: K extends keyof Environment ? Environment[K] : never;
 };
 
-export type Context<Env extends Partial<Environment> = Environment> = {
-	env: Env;
+const REDIRECT_SYMBOL: unique symbol = Symbol.for("framework.redirect");
+
+export interface FrameworkContext<
+	Env extends Partial<Environment> = Environment,
+> {
+	[REDIRECT_SYMBOL]?: To;
 	cookie: Cookie;
-	redirect(to: To): never;
+	durableId?: DurableId;
+	env: Env;
+	storage?: Storage;
+
+	blockConcurrencyWhile?: <T>(callback: () => Promise<T>) => Promise<T>;
 	// biome-ignore lint/suspicious/noExplicitAny: better for everyone
 	waitUntil(promise: Promise<any>): void;
-};
+}
 
-export const UNSAFE_ContextStorage = new AsyncLocalStorage<Context>();
+export interface Context<Env extends Partial<Environment> = Environment> {
+	cookie: Cookie;
+	env: Env;
 
-export function getContext<Keys extends EnvironmentKeys>(): Context<
-	PartialEnvironment<Keys>
-> {
-	const c = UNSAFE_ContextStorage.getStore();
+	// biome-ignore lint/suspicious/noExplicitAny: better for everyone
+	waitUntil(promise: Promise<any>): void;
+}
+
+export const UNSAFE_FrameworkContextStorage =
+	new AsyncLocalStorage<FrameworkContext>();
+
+function assertContext(c: FrameworkContext | undefined): asserts c is Context {
 	assert(c, "No context available.");
-	return c as Context<PartialEnvironment<Keys>>;
+	assert(c.cookie, "No cookie available.");
+	assert(c.env, "No environments available.");
+	assert(c.waitUntil, "No waitUntil available.");
+}
+
+export function getContext<
+	Dependencies extends EnvironmentKeys = never,
+>(): Context<PartialEnvironment<Dependencies>> {
+	const c = UNSAFE_FrameworkContextStorage.getStore();
+	assertContext(c);
+
+	return c;
 }
 
 export async function handleRequest<
 	TypeSafeRoutes extends readonly RouteDefinition[],
-	Keys extends EnvironmentKeys,
+	Dependencies extends EnvironmentKeys,
 >(
 	request: Request,
-	c: Context<PartialEnvironment<Keys>>,
+	c: FrameworkContext<PartialEnvironment<Dependencies>>,
 	routes: TypeSafeRoutes,
 ): Promise<Response> {
-	return UNSAFE_ContextStorage.run(
+	return UNSAFE_FrameworkContextStorage.run(
 		{
 			cookie: c.cookie,
 			env: c.env,
-			redirect: c.redirect,
+			storage: c.storage,
 			waitUntil: c.waitUntil,
 		},
 		async () => {
@@ -89,6 +174,22 @@ export function getAction<Func extends ActionFunction>(
 		action: async () => {},
 		data: undefined,
 	};
+}
+
+export function actionRedirect(to: To, shouldThrow: false): void;
+export function actionRedirect(to: To, shouldThrow?: true): never;
+export function actionRedirect(to: To, shouldThrow = true): never {
+	const c = UNSAFE_FrameworkContextStorage.getStore();
+	assert(c, "No context available.");
+	assert(!c[REDIRECT_SYMBOL], "Redirect already set.");
+
+	c[REDIRECT_SYMBOL] = to;
+
+	const error: Error & { $$typeof?: typeof REDIRECT_SYMBOL } = new Error(
+		"framework.redirect",
+	);
+	error.$$typeof = REDIRECT_SYMBOL;
+	throw error;
 }
 
 // biome-ignore lint/suspicious/noEmptyInterface: needed for type merging is userland.

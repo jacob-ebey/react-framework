@@ -2,11 +2,9 @@
 // I use a durable object to cache the user's profile and persist for fast retrieval
 // instead of interacting directly with the database from a worker.
 
-import { assert, getAction, getContext } from "framework";
+import { actionRedirect, assert, getAction, getContext } from "framework";
 
 import { validateProfileInput } from "~/lib.js";
-
-export type Environment = "PROFILE";
 
 // I execute on the eyeball worker before delegating the request to the
 // service binding for this route.
@@ -15,9 +13,11 @@ export function eyeball() {
 
 	const userId = c.cookie.get("userId");
 	if (!userId) {
-		throw c.redirect("/");
+		return Response.redirect("/");
 	}
 }
+
+export type Environment = "PROFILE";
 
 export default async function ProfileRoute() {
 	// Get the state of the updateProfile action.
@@ -61,7 +61,7 @@ async function logoutAction() {
 
 	const c = getContext<Environment>();
 	c.cookie.unset("userId");
-	throw c.redirect("/");
+	actionRedirect("/");
 }
 
 // A form action to update the user's profile.

@@ -4,7 +4,7 @@
 // state to be maintained across requests and accessible from multiple
 // workers / durable objects.
 
-import { Durable } from "framework/cloudflare";
+import { Durable } from "framework";
 
 export type LoginInput = { email: string; password: string };
 

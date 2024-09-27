@@ -3,7 +3,7 @@ import type { toDurableObjectStub } from "framework/cloudflare";
 
 import type { DatabaseDurable } from "~/db.js";
 
-export default class extends ServerEntry<"DB"> {
+export default class extends ServerEntry<never, "DB" | "D1"> {
 	private db: toDurableObjectStub<DatabaseDurable>;
 
 	constructor() {

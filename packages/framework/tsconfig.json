@@ -4,7 +4,15 @@
 		"module": "NodeNext",
 		"moduleResolution": "NodeNext",
 		"target": "ES2022",
-		"lib": ["ES2022"],
-		"types": ["@cloudflare/workers-types", "node"]
+		"lib": ["DOM", "ES2022"],
+		"types": ["@cloudflare/workers-types", "node"],
+		"customConditions": ["source"],
+		"skipLibCheck": true,
+		"rootDir": "src",
+		"outDir": "dist",
+		"declaration": true,
+		"isolatedModules": true,
+		"sourceMap": true,
+		"declarationMap": true
 	}
 }

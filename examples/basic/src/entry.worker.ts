@@ -28,32 +28,40 @@ declare module "framework" {
 	export interface Environment extends Env {}
 }
 
-export default class extends ServerEntry<EnvironmentKeys> {
-	fetch(request: Request) {
+export default class extends ServerEntry<never, EnvironmentKeys> {
+	async fetch(request: Request) {
+		const t = await import("./api/profile.js", {
+			with: { type: "worker" },
+		});
+
 		return handleRequest(request, this, [
 			{
+				id: "shell",
 				import: () => import("./global-shell.js"),
 				children: [
 					{
+						id: "layout",
 						cache: true,
 						import: () =>
 							import("./routes/layout.js", {
-								with: { type: "react-worker" },
+								with: { type: "react-service" },
 							}),
 						children: [
 							{
+								id: "login",
 								index: true,
 								cache: true,
 								import: () =>
 									import("./routes/login.js", {
-										with: { type: "react-worker" },
+										with: { type: "react-service" },
 									}),
 							},
 							{
-								path: "/profile",
+								id: "profile",
+								pattern: { pathname: "/profile" },
 								import: () =>
 									import("./routes/profile.js", {
-										with: { type: "react-worker" },
+										with: { type: "react-service" },
 									}),
 							},
 						],
@@ -61,15 +69,22 @@ export default class extends ServerEntry<EnvironmentKeys> {
 				],
 			},
 			{
-				path: "/api/profile",
+				id: "api/profile",
+				pattern: { pathname: "/api/profile" },
 				import: () =>
 					import("./api/profile.js", {
-						with: { type: "worker" },
+						with: { type: "service" },
 					}),
 			},
 			{
-				path: "/api/status",
+				id: "api/status",
+				pattern: { pathname: "/api/status" },
 				import: () => import("./api/status.js"),
+			},
+			{
+				id: "api/ping",
+				pattern: { pathname: "/api/ping" },
+				import: () => import("./api/ping.js"),
 			},
 		]);
 	}

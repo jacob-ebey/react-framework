@@ -2,12 +2,18 @@
 	"private": true,
 	"name": "@example/basic",
 	"type": "module",
+	"scripts": {
+		"build": "vite build --app"
+	},
 	"dependencies": {
-		"framework": "workspace:*"
+		"framework": "workspace:*",
+		"react": "19.0.0-rc-204a551e-20240926"
 	},
 	"devDependencies": {
 		"@cloudflare/workers-types": "4.20240924.0",
 		"@types/react": "18.3.9",
-		"typescript": "5.6.2"
+		"typescript": "5.6.2",
+		"vite": "6.0.0-beta.1",
+		"vite-tsconfig-paths": "5.0.1"
 	}
 }

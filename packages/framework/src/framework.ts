@@ -1,14 +1,155 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 
-// biome-ignore lint/suspicious/noExplicitAny: TODO - define RouteDefinition.
-type RouteDefinition = any;
+import type * as React from "react";
+
+import type {
+	IndexRouteDefinition as BaseIndexRouteDefinition,
+	NonIndexRouteDefinition as BaseNonIndexRouteDefinition,
+} from "framework/router";
+import { matchRoutes } from "framework/router";
+import { assert } from "framework/utils";
+
+export { assert };
+
+export type ServiceBindingFactoryArgs = {
+	name: string;
+};
+
+export type ServiceBindingFactory = (
+	args: ServiceBindingFactoryArgs,
+) => ServiceBinding;
+
+export interface ServiceBinding {
+	fetch(request: Request): Promise<Response>;
+}
+
+export interface EyeballBuildOutput {
+	fetch(request: Request, c: FrameworkContext<Environment>): Promise<Response>;
+}
+
+export type EyeballFunction = () =>
+	| never
+	| undefined
+	| null
+	| Response
+	| Promise<never | undefined | null | Response>;
+
+export type ServerRouteModule = {
+	// biome-ignore lint/suspicious/noExplicitAny: needed
+	default: new () => ServerEntry<any, any>;
+	eyeball?: EyeballFunction;
+};
+
+export type ReactRouteModule = {
+	// biome-ignore lint/suspicious/noExplicitAny: better for everyone
+	default: React.FC<any>;
+	eyeball?: EyeballFunction;
+};
+
+export type IndexRouteDefinition = BaseIndexRouteDefinition<RouteModule> & {
+	id?: string;
+	parallel?: Record<string, RouteDefinition>;
+};
+
+export type NonIndexRouteDefinition = Omit<
+	BaseNonIndexRouteDefinition<RouteModule>,
+	"children"
+> & {
+	id?: string;
+	parallel?: Record<string, RouteDefinition>;
+	children?: RouteDefinition[];
+};
+
+export type RouteModule = ServerRouteModule | ReactRouteModule;
+
+export type RouteDefinition = IndexRouteDefinition | NonIndexRouteDefinition;
+
+// const mod!: RouteModule<EnvironmentKeys>;
+// // biome-ignore lint/suspicious/noPrototypeBuiltins: <explanation>
+// if (ServerEntry.isPrototypeOf(mod.default)) {
+// 	const ServerEntry =
+// 		mod.default as ServerRouteModule<EnvironmentKeys>["default"];
+// 	const t = new ServerEntry();
+// 	t.fetch(new Request(""));
+// }
+
+export async function handleRequest(
+	request: Request,
+	c: FrameworkContext<PartialEnvironment<EnvironmentKeys>>,
+	routes: RouteDefinition[],
+): Promise<Response> {
+	const url = new URL(request.url);
+	const matches = await matchRoutes(routes, url);
+
+	if (!matches || matches.length === 0) {
+		return new Response("", { status: 404 });
+	}
+
+	const modulePromises: (Promise<RouteModule> | null)[] = [];
+	let lastModulePromise: Promise<RouteModule> | null = null;
+	for (const { route } of matches) {
+		const promise = route.import?.() ?? null;
+		modulePromises.push(promise);
+		if (promise) {
+			lastModulePromise = promise;
+		}
+	}
+
+	assert(lastModulePromise, "No module to load from matched routes.");
+
+	const lastModule = await lastModulePromise;
+
+	// biome-ignore lint/suspicious/noPrototypeBuiltins: <explanation>
+	if (ServerEntry.isPrototypeOf(lastModule.default)) {
+		const Entry = lastModule.default as ServerRouteModule["default"];
+		const entry = new Entry();
+		return UNSAFE_FrameworkContextStorage.run(
+			{
+				cookie: c.cookie,
+				env: c.env,
+				storage: c.storage,
+				waitUntil: c.waitUntil,
+			},
+			async () => {
+				return entry.fetch(request);
+			},
+		);
+	}
+
+	return new Response("TODO: Implement React route handling.", { status: 500 });
+}
+
+export type UNSAFE_CookieHandler = {
+	cookie: Cookie;
+	send(response: Response): Response;
+};
+
+export function UNSAFE_createCookieHandler(
+	cookie: string | null,
+	secrets: string[] | null | undefined,
+): UNSAFE_CookieHandler {
+	// TODO: Implement cookie handler.
+	return {
+		cookie: {
+			get(key, required) {},
+			getUnsigned(key, required) {},
+			set(key, value) {},
+			setUnsigned(key, value) {},
+			unset(key) {},
+		},
+		send(response) {
+			return response;
+		},
+	};
+}
 
 export interface NeutralServerEntry {
 	fetch(request: Request): Response | Promise<Response>;
 }
 
-// biome-ignore lint/suspicious/noEmptyInterface: needed for type merging is userland.
-export interface Environment {}
+export interface Environment {
+	[key: string]: unknown;
+}
 
 export type EnvironmentKeys = keyof Environment;
 
@@ -19,8 +160,10 @@ export type BlockConcurrencyWhile = <T>(
 // biome-ignore lint/suspicious/noExplicitAny: better for everyone
 export type WaitUntil = (promise: Promise<any>) => void;
 
-export abstract class ServerEntry<Dependencies extends EnvironmentKeys>
-	implements NeutralServerEntry
+export abstract class ServerEntry<
+	Name extends string,
+	Dependencies extends EnvironmentKeys,
+> implements NeutralServerEntry
 {
 	env: PartialEnvironment<Dependencies>;
 	cookie: Cookie;
@@ -49,20 +192,19 @@ export abstract class Durable<
 	env: PartialEnvironment<Dependencies>;
 	id: DurableId;
 	storage: Storage;
-	waitUntil: WaitUntil;
 
 	constructor() {
 		const c = UNSAFE_FrameworkContextStorage.getStore();
 		assert(c, "No context available.");
 		assert(c.blockConcurrencyWhile, "No blockConcurrencyWhile available.");
 		assert(c.durableId, "No durable ID available.");
+		assert(c.env, "Environment not available.");
 		assert(c.storage, "Storage not available.");
 
 		this.blockConcurrencyWhile = c.blockConcurrencyWhile;
-		this.env = c.env;
+		this.env = c.env as PartialEnvironment<Dependencies>;
 		this.id = c.durableId;
 		this.storage = c.storage;
-		this.waitUntil = c.waitUntil;
 	}
 }
 
@@ -101,22 +243,18 @@ export interface FrameworkContext<
 	Env extends Partial<Environment> = Environment,
 > {
 	[REDIRECT_SYMBOL]?: To;
-	cookie: Cookie;
+	blockConcurrencyWhile?: BlockConcurrencyWhile;
+	cookie?: Cookie;
 	durableId?: DurableId;
-	env: Env;
+	env?: Env;
 	storage?: Storage;
-
-	blockConcurrencyWhile?: <T>(callback: () => Promise<T>) => Promise<T>;
-	// biome-ignore lint/suspicious/noExplicitAny: better for everyone
-	waitUntil(promise: Promise<any>): void;
+	waitUntil?: WaitUntil;
 }
 
 export interface Context<Env extends Partial<Environment> = Environment> {
 	cookie: Cookie;
 	env: Env;
-
-	// biome-ignore lint/suspicious/noExplicitAny: better for everyone
-	waitUntil(promise: Promise<any>): void;
+	waitUntil: WaitUntil;
 }
 
 export const UNSAFE_FrameworkContextStorage =
@@ -125,7 +263,7 @@ export const UNSAFE_FrameworkContextStorage =
 function assertContext(c: FrameworkContext | undefined): asserts c is Context {
 	assert(c, "No context available.");
 	assert(c.cookie, "No cookie available.");
-	assert(c.env, "No environments available.");
+	assert(c.env, "No environment available.");
 	assert(c.waitUntil, "No waitUntil available.");
 }
 
@@ -135,28 +273,7 @@ export function getContext<
 	const c = UNSAFE_FrameworkContextStorage.getStore();
 	assertContext(c);
 
-	return c;
-}
-
-export async function handleRequest<
-	TypeSafeRoutes extends readonly RouteDefinition[],
-	Dependencies extends EnvironmentKeys,
->(
-	request: Request,
-	c: FrameworkContext<PartialEnvironment<Dependencies>>,
-	routes: TypeSafeRoutes,
-): Promise<Response> {
-	return UNSAFE_FrameworkContextStorage.run(
-		{
-			cookie: c.cookie,
-			env: c.env,
-			storage: c.storage,
-			waitUntil: c.waitUntil,
-		},
-		async () => {
-			return new Response("Hello, World!");
-		},
-	);
+	return c as Context<PartialEnvironment<Dependencies>>;
 }
 
 // biome-ignore lint/suspicious/noExplicitAny: needed for inference.
@@ -222,9 +339,3 @@ export type ToObject = {
 	search?: string;
 };
 export type To = string | ToObject;
-
-export function assert<T>(condition: T, message?: string): asserts condition {
-	if (!condition) {
-		throw new Error(message ?? "Assertion failed");
-	}
-}

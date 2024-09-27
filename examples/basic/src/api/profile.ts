@@ -18,7 +18,7 @@ export function eyeball() {
 	}
 }
 
-export default class extends ServerEntry<"PROFILE"> {
+export default class extends ServerEntry<never, "PROFILE" | "DB"> {
 	async fetch(request: Request) {
 		const userId = this.cookie.get("userId", true);
 

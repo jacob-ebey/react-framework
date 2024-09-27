@@ -8,6 +8,11 @@
 			"types": "./dist/framework.d.ts",
 			"default": "./dist/framework.js"
 		},
+		"./build-meta": {
+			"source": "./src/build-meta.ts",
+			"types": "./dist/build-meta.d.ts",
+			"default": "./dist/build-meta.js"
+		},
 		"./cloudflare": {
 			"source": "./src/cloudflare.ts",
 			"types": "./dist/cloudflare.d.ts",

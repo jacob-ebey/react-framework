@@ -13,7 +13,6 @@ export { assert };
 
 export type ServiceBindingFactoryMeta = {
 	name: string;
-	dependencies: string[];
 };
 
 export type ServiceBindingFactory = (

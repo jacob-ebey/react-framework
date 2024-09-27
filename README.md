@@ -1,11 +1,10 @@
 # React Framework
 
-:::{callout}
-This is a work in progress. Assume any CF specific terms below are placeholders and will be abstracted out for any runtime.
-
-`ExportedHandler` = `ServerEntry`
-`DurableObject` = `Durable`
-:::
+> [!NOTE]  
+> This is a work in progress. Assume any CF specific terms below are placeholders and will be abstracted out for any runtime.
+>
+> - `ExportedHandler` = `ServerEntry`
+> - `DurableObject` = `Durable`
 
 Entrypoint is a standard worker entrypoint exporting default an `ExportedHandler`. It configures the eyeball worker with a `handleRequest` function that accepts a routes configuration. This is the "prerender" server that renders to HTML.
 

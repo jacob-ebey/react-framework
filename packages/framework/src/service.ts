@@ -1,36 +1,34 @@
 import type {
 	EnvironmentKeys,
-	ServiceBinding,
 	ServiceBindingFactory,
-	ServiceBindingFactoryArgs,
+	ServiceBindingFactoryMeta,
 } from "framework";
 import { assert, ServerEntry } from "framework";
 
 declare const serviceBindingFactory: ServiceBindingFactory;
 
 export default class extends ServerEntry<never, EnvironmentKeys> {
-	private binding: ServiceBinding;
+	private server: ServerEntry<never, EnvironmentKeys>;
 
 	constructor() {
 		super();
 
-		const args: ServiceBindingFactoryArgs =
-			"__SERVICE_BINDING_FACTORY_ARGS__" as unknown as ServiceBindingFactoryArgs;
+		const args: ServiceBindingFactoryMeta =
+			"__SERVICE_BINDING_FACTORY_ARGS__" as unknown as ServiceBindingFactoryMeta;
 
 		assert(
-			(args as unknown) !== "__SERVICE_BINDING_FACTORY_ARGS__",
+			typeof args === "object",
 			"service binding factory args not provided",
 		);
-		assert(args, "service binding factory args not provided");
 		assert(
 			typeof serviceBindingFactory === "function",
 			"serviceBindingFactory a function",
 		);
 
-		this.binding = serviceBindingFactory(args);
+		this.server = serviceBindingFactory(args);
 	}
 
 	fetch(request: Request) {
-		return this.binding.fetch(request);
+		return this.server.fetch(request);
 	}
 }

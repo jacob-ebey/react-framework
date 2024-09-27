@@ -193,10 +193,11 @@ async function parseWorkerEntry(source: string, filename: string) {
 		},
 	});
 	assert(allServers.length === 1, "expected exactly one ServerEntry");
+
 	const serverTypeNode = allServers[0];
 	let name = serverTypeNode.text();
 	name =
-		name === "never" ? `${filepathToBindingName(filename, ext)}_EYEBALL` : name;
+		name === "never" ? `${filepathToBindingName(filename, ext)}_SERVICE` : name;
 
 	const allDependencies = parsed.root().findAll({
 		rule: {
@@ -243,6 +244,7 @@ async function parseWorkerEntry(source: string, filename: string) {
 		},
 	});
 	assert(allDependencies.length === 1, "expected exactly one ServerEntry");
+
 	const dependencyTypeNode = allDependencies[0];
 	const dependencies: string[] = [];
 	switch (dependencyTypeNode.kind()) {

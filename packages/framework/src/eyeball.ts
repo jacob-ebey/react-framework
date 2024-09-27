@@ -1,7 +1,7 @@
 import type {
 	EyeballBuildOutput,
 	EnvironmentKeys,
-	ServerEntry,
+	ServerConstructor,
 	UNSAFE_CookieHandler,
 } from "framework";
 import {
@@ -10,7 +10,7 @@ import {
 	UNSAFE_FrameworkContextStorage,
 } from "framework";
 
-declare const EyeballEntry: new () => ServerEntry<never, EnvironmentKeys>;
+declare const EyeballEntry: ServerConstructor;
 const COOKIE_SECRET_KEYS = ["COOKIE_SECRET"] as EnvironmentKeys[];
 
 export default {

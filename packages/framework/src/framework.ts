@@ -11,17 +11,15 @@ import { assert } from "framework/utils";
 
 export { assert };
 
-export type ServiceBindingFactoryArgs = {
+export type ServiceBindingFactoryMeta = {
 	name: string;
+	dependencies: string[];
 };
 
 export type ServiceBindingFactory = (
-	args: ServiceBindingFactoryArgs,
-) => ServiceBinding;
-
-export interface ServiceBinding {
-	fetch(request: Request): Promise<Response>;
-}
+	args: ServiceBindingFactoryMeta,
+	// biome-ignore lint/suspicious/noExplicitAny: required
+) => ServerEntry<any, any>;
 
 export interface EyeballBuildOutput {
 	fetch(request: Request, c: FrameworkContext<Environment>): Promise<Response>;
@@ -34,17 +32,31 @@ export type EyeballFunction = () =>
 	| Response
 	| Promise<never | undefined | null | Response>;
 
-export type ServerRouteModule = {
-	// biome-ignore lint/suspicious/noExplicitAny: needed
-	default: new () => ServerEntry<any, any>;
-	eyeball?: EyeballFunction;
-};
+// biome-ignore lint/suspicious/noExplicitAny: needed
+export type ServerConstructor = new () => ServerEntry<any, any>;
+
+export type ServerRouteModule =
+	| {
+			default: ServerConstructor;
+			eyeball?: EyeballFunction;
+	  }
+	| {
+			default: Fetcher;
+			eyeball?: EyeballFunction;
+	  }
+	| Fetcher;
 
 export type ReactRouteModule = {
-	// biome-ignore lint/suspicious/noExplicitAny: better for everyone
+	// biome-ignore lint/suspicious/noExplicitAny: needed
 	default: React.FC<any>;
 	eyeball?: EyeballFunction;
 };
+
+export type RouteModule =
+	| ServerRouteModule
+	| ReactRouteModule
+	| Fetcher
+	| ServerConstructor;
 
 export type IndexRouteDefinition = BaseIndexRouteDefinition<RouteModule> & {
 	id?: string;
@@ -59,8 +71,6 @@ export type NonIndexRouteDefinition = Omit<
 	parallel?: Record<string, RouteDefinition>;
 	children?: RouteDefinition[];
 };
-
-export type RouteModule = ServerRouteModule | ReactRouteModule;
 
 export type RouteDefinition = IndexRouteDefinition | NonIndexRouteDefinition;
 
@@ -99,10 +109,31 @@ export async function handleRequest(
 
 	const lastModule = await lastModulePromise;
 
-	// biome-ignore lint/suspicious/noPrototypeBuiltins: <explanation>
-	if (ServerEntry.isPrototypeOf(lastModule.default)) {
-		const Entry = lastModule.default as ServerRouteModule["default"];
-		const entry = new Entry();
+	let fetcher: Fetcher | undefined;
+
+	if ("default" in lastModule) {
+		if (
+			"fetch" in lastModule.default &&
+			typeof lastModule.default.fetch === "function"
+		) {
+			fetcher = lastModule.default as Fetcher;
+			// biome-ignore lint/suspicious/noPrototypeBuiltins: why u no like dis?
+		} else if (ServerEntry.isPrototypeOf(lastModule.default)) {
+			const Entry = lastModule.default as ServerConstructor;
+			fetcher = new Entry();
+		}
+	}
+	if (!fetcher) {
+		if ("fetch" in lastModule && typeof lastModule.fetch === "function") {
+			fetcher = lastModule as Fetcher;
+			// biome-ignore lint/suspicious/noPrototypeBuiltins: why u no like dis?
+		} else if (ServerEntry.isPrototypeOf(lastModule)) {
+			const Entry = lastModule as ServerConstructor;
+			fetcher = new Entry();
+		}
+	}
+
+	if (fetcher) {
 		return UNSAFE_FrameworkContextStorage.run(
 			{
 				cookie: c.cookie,
@@ -111,7 +142,7 @@ export async function handleRequest(
 				waitUntil: c.waitUntil,
 			},
 			async () => {
-				return entry.fetch(request);
+				return fetcher.fetch(request);
 			},
 		);
 	}
@@ -143,10 +174,6 @@ export function UNSAFE_createCookieHandler(
 	};
 }
 
-export interface NeutralServerEntry {
-	fetch(request: Request): Response | Promise<Response>;
-}
-
 export interface Environment {
 	[key: string]: unknown;
 }
@@ -160,10 +187,14 @@ export type BlockConcurrencyWhile = <T>(
 // biome-ignore lint/suspicious/noExplicitAny: better for everyone
 export type WaitUntil = (promise: Promise<any>) => void;
 
+export interface Fetcher {
+	fetch(request: Request): Promise<Response>;
+}
+
 export abstract class ServerEntry<
 	Name extends string,
 	Dependencies extends EnvironmentKeys,
-> implements NeutralServerEntry
+> implements Fetcher
 {
 	env: PartialEnvironment<Dependencies>;
 	cookie: Cookie;
@@ -176,7 +207,8 @@ export abstract class ServerEntry<
 		this.cookie = c.cookie;
 		this.waitUntil = c.waitUntil;
 	}
-	abstract fetch(request: Request): Response | Promise<Response>;
+
+	abstract fetch(request: Request): Promise<Response>;
 }
 
 interface DurableId {

@@ -10,8 +10,9 @@ class Binding extends ServerEntry<never, EnvironmentKeys> {
 		super();
 	}
 
-	async fetch(request: Request) {
-		return new Response(`Hello, ${this.name} binding!`);
+	fetch(request: Request) {
+		const binding = this.env[this.name] as Fetcher;
+		return binding.fetch(request);
 	}
 }
 

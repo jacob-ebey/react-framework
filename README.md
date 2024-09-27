@@ -1,4 +1,11 @@
-# Cloudflare based react framework
+# React Framework
+
+:::{callout}
+This is a work in progress. Assume any CF specific terms below are placeholders and will be abstracted out for any runtime.
+
+`ExportedHandler` = `ServerEntry`
+`DurableObject` = `Durable`
+:::
 
 Entrypoint is a standard worker entrypoint exporting default an `ExportedHandler`. It configures the eyeball worker with a `handleRequest` function that accepts a routes configuration. This is the "prerender" server that renders to HTML.
 
@@ -8,7 +15,11 @@ The `import` of each route config can either point to a module that contains a d
 
 A class that extends and brands the cloudflare DurableObject class. It is used for discovery, type generation and deployment configuration.
 
-## `worker` Module
+## `service` Module
+
+```ts
+import("./api/profile.js", { with: { type: "service" } });
+```
 
 Denotes a module as a unique worker entrypoint and a react-server context that runs as close as possible to the user and is executed through a service binding from the eyeball worker.
 
@@ -16,7 +27,11 @@ Denotes a module as a unique worker entrypoint and a react-server context that r
 
 A function that executes on the eyeball worker before delegating the request to the service binding for this route.
 
-## `react-worker` Module
+## `react-service` Module
+
+```ts
+import("./routes/login.js", { with: { type: "react-service" } });
+```
 
 Denotes a module as a unique worker entrypoint and a react-server context that runs as close as possible to the user and is executed through a service binding from the eyeball worker.
 

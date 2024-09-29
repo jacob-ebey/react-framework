@@ -40,6 +40,7 @@ type PluginContext = {
 	environmentDependencies: Record<string, Set<string>>;
 	cookieSecretKeys: undefined | string[];
 	entry: string;
+	services: Record<string, string[]>;
 	serviceBindingFactory: string;
 	buildMetaPromise: Deferred<BuildMeta>;
 };
@@ -61,19 +62,19 @@ export default function framework({
 			environmentDependencies: {},
 			cookieSecretKeys,
 			buildMetaPromise: new Deferred<BuildMeta>(),
+			services: {},
 			serviceBindingFactory,
 		} satisfies Omit<PluginContext, "entry"> as PluginContext);
 
-	async function initialize(
-		mode: "dev" | "build" | "unknown",
-		resolve: ResolveFunction,
-	) {
-		const entryResolved = await cachedResolve(resolve, entry);
-		assert(entryResolved?.id, `could not resolve entry ${entry}`);
-		context.entry = entryResolved.id;
+	async function initialize(mode: string, root: string) {
+		console.log({ mode });
+		const entryResolved = path.resolve(root, entry);
+		const entryDir = path.dirname(entryResolved);
+		assert(fileExists(entryResolved), `could not resolve entry ${entry}`);
+		context.entry = entryResolved;
 
-		const contents = await fsp.readFile(entryResolved.id, "utf8");
-		const ext = path.extname(entryResolved.id);
+		const contents = await fsp.readFile(entryResolved, "utf8");
+		const ext = path.extname(entryResolved);
 		const ast = await astGrep.parseAsync(
 			(ext === ".tsx" ? "Tsx" : "TypeScript") as unknown as astGrep.Lang,
 			contents,
@@ -83,8 +84,12 @@ export default function framework({
 		// and create environments for each service defined in the entry file by
 		// import attributes.
 		const importAttributesMeta = extractImportAttributes(ast);
+		for (const meta of importAttributesMeta) {
+			context.services[meta.type] ??= [];
+			context.services[meta.type].push(path.resolve(entryDir, meta.importPath));
+		}
 
-		if (mode !== "build") {
+		if (mode !== "production") {
 			context.buildMetaPromise.promise.catch(() => {});
 			context.buildMetaPromise.reject(
 				new Error(
@@ -99,48 +104,100 @@ export default function framework({
 		{
 			name: "framework:setup",
 			enforce: "pre",
-			async load() {
+			async config(userConfig, { mode }) {
 				if (initialized) return;
 				if (!global.initializePromise) {
 					global.initializePromise = initialize(
-						this.environment.mode,
-						this.resolve,
+						userConfig.mode ?? mode,
+						userConfig.root ?? process.cwd(),
 					);
 				}
 				await global.initializePromise;
 				initialized = true;
-			},
-			config(userConfig) {
+
+				const { services } = context;
+				assert(services, "plugin not initialized");
+
 				return vite.mergeConfig(
 					{
 						builder: {
 							async buildApp(builder) {
 								await builder.build(builder.environments.ssr);
 								await builder.build(builder.environments.meta);
+
+								await Promise.all([
+									...(services.service ?? []).map((_, i) =>
+										builder.build(builder.environments[`SERVICE_${i}`]),
+									),
+									...(services["react-service"] ?? []).map((_, i) =>
+										builder.build(builder.environments[`REACT_SERVICE_${i}`]),
+									),
+								]);
 							},
 						},
 						build: {
 							outDir: "dist/eyeball",
 						},
-						environments: {
-							ssr: {
-								build: {
-									rollupOptions: {
-										input: "framework/virtual/eyeball",
+						environments: vite.mergeConfig<
+							Record<string, vite.EnvironmentOptions>,
+							Record<string, vite.EnvironmentOptions>
+						>(
+							{
+								ssr: {
+									build: {
+										rollupOptions: {
+											input: "framework/virtual/eyeball",
+										},
+									},
+								},
+								meta: {
+									build: {
+										outDir: "dist/meta",
+										rollupOptions: {
+											input: "framework/virtual/build-meta",
+										},
 									},
 								},
 							},
-							meta: {
-								build: {
-									outDir: "dist/meta",
-									rollupOptions: {
-										input: "framework/virtual/build-meta",
-									},
-								},
-							},
-						},
+							vite.mergeConfig<
+								Record<string, vite.EnvironmentOptions>,
+								Record<string, vite.EnvironmentOptions>
+							>(
+								Object.fromEntries(
+									(services.service ?? []).map((service, i) => [
+										`SERVICE_${i}`,
+										{
+											build: {
+												outDir: `dist/services/${i}`,
+												rollupOptions: {
+													// TODO: This is gross
+													input: service.replace(/\.[jt]sx?$/, ""),
+												},
+											},
+										} satisfies vite.EnvironmentOptions,
+									]),
+								),
+								Object.fromEntries(
+									(services["react-service"] ?? []).map((service, i) => [
+										`REACT_SERVICE_${i}`,
+										{
+											build: {
+												outDir: `dist/react-services/${i}`,
+												rollupOptions: {
+													// TODO: This is gross
+													input: service.replace(/\.[jt]sx?$/, ""),
+												},
+											},
+										} satisfies vite.EnvironmentOptions,
+									]),
+								),
+								false,
+							),
+							false,
+						),
 					} satisfies vite.UserConfig,
 					userConfig,
+					true,
 				);
 			},
 		},
@@ -341,14 +398,6 @@ function dependencies(context: PluginContext): vite.Plugin {
 	return {
 		name: "framework:dependencies",
 		enforce: "pre",
-		config(userConfig) {
-			return vite.mergeConfig<vite.UserConfig, vite.UserConfig>(
-				{
-					esbuild: {},
-				},
-				userConfig,
-			);
-		},
 		async transform(code, id) {
 			const { environmentDependencies } = context;
 			assert(environmentDependencies, "plugin not initialized");
@@ -428,24 +477,6 @@ type ResolveFunction = (
 		skipSelf?: boolean;
 	},
 ) => Promise<vite.Rollup.ResolvedId | null>;
-
-const resolveCache = new Map<string, vite.Rollup.ResolvedId>();
-function cachedResolve<T>(
-	resolve: ResolveFunction,
-	source: string,
-	importer?: string,
-) {
-	const id = `${source}||${importer ?? ""}`;
-	const cached = resolveCache.get(id);
-	if (cached) {
-		return Promise.resolve(cached);
-	}
-
-	return resolve(source, importer, { skipSelf: true }).then((resolved) => {
-		if (resolved) resolveCache.set(id, resolved);
-		return resolved;
-	});
-}
 
 function fileExists(filepath: string) {
 	return fsp

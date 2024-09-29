@@ -4,9 +4,13 @@ import * as path from "node:path";
 import * as astGrep from "@ast-grep/napi";
 import * as vite from "vite";
 
-import type { ServiceBindingFactoryMeta } from "framework";
-import type { BuildMeta, BindingsMeta } from "framework/build-meta";
+import type { BindingsMeta, BuildMeta } from "framework/virtual/build-meta";
 import { assert } from "framework/utils";
+import {
+	extractImportAttributes,
+	extractReactServerEntry,
+	extractServerEntries,
+} from "framework/compiler";
 
 export type StorageConfig = {
 	package: string;
@@ -33,7 +37,7 @@ declare global {
 }
 
 type PluginContext = {
-	bindingMeta: BindingsMeta;
+	environmentDependencies: Record<string, Set<string>>;
 	cookieSecretKeys: undefined | string[];
 	entry: string;
 	serviceBindingFactory: string;
@@ -54,7 +58,7 @@ export default function framework({
 		__CONTEXT__ ??
 		// biome-ignore lint/suspicious/noAssignInExpressions: why u no like dis?
 		(__CONTEXT__ = {
-			bindingMeta: {},
+			environmentDependencies: {},
 			cookieSecretKeys,
 			buildMetaPromise: new Deferred<BuildMeta>(),
 			serviceBindingFactory,
@@ -68,19 +72,35 @@ export default function framework({
 		assert(entryResolved?.id, `could not resolve entry ${entry}`);
 		context.entry = entryResolved.id;
 
+		const contents = await fsp.readFile(entryResolved.id, "utf8");
+		const ext = path.extname(entryResolved.id);
+		const ast = await astGrep.parseAsync(
+			(ext === ".tsx" ? "Tsx" : "TypeScript") as unknown as astGrep.Lang,
+			contents,
+		);
+
+		// TODO: Move initialize function to be called from the the "config()" hook
+		// and create environments for each service defined in the entry file by
+		// import attributes.
+		const importAttributesMeta = extractImportAttributes(ast);
+
 		if (mode !== "build") {
 			context.buildMetaPromise.promise.catch(() => {});
 			context.buildMetaPromise.reject(
-				new Error("can not import framework/build-meta outside of build mode"),
+				new Error(
+					"can not import framework/virtual/build-meta outside of build mode",
+				),
 			);
 		}
 	}
 
+	let initialized = false;
 	return [
 		{
 			name: "framework:setup",
 			enforce: "pre",
 			async load() {
+				if (initialized) return;
 				if (!global.initializePromise) {
 					global.initializePromise = initialize(
 						this.environment.mode,
@@ -88,26 +108,7 @@ export default function framework({
 					);
 				}
 				await global.initializePromise;
-			},
-		},
-		frameworkEyeball(context),
-		frameworkBuildMeta(context),
-		{
-			name: "framework",
-			async watchChange(id, { event }) {
-				const resolvedEntry = await cachedResolve(this.resolve, entry);
-				assert(resolvedEntry, `could not resolve entry ${id}`);
-
-				if (id === resolvedEntry.id) {
-					switch (event) {
-						case "create":
-							break;
-						case "delete":
-							break;
-						case "update":
-							break;
-					}
-				}
+				initialized = true;
 			},
 			config(userConfig) {
 				return vite.mergeConfig(
@@ -125,7 +126,7 @@ export default function framework({
 							ssr: {
 								build: {
 									rollupOptions: {
-										input: "framework/eyeball",
+										input: "framework/virtual/eyeball",
 									},
 								},
 							},
@@ -133,7 +134,7 @@ export default function framework({
 								build: {
 									outDir: "dist/meta",
 									rollupOptions: {
-										input: "framework/build-meta",
+										input: "framework/virtual/build-meta",
 									},
 								},
 							},
@@ -143,21 +144,41 @@ export default function framework({
 				);
 			},
 		},
+		eyeball(context),
+		services(context),
+		reactServices(context),
+		dependencies(context),
+		frameworkBuildMeta(context),
+		// {
+		// 	name: "framework",
+		// 	async watchChange(id, { event }) {
+		// 		const resolvedEntry = await cachedResolve(this.resolve, entry);
+		// 		assert(resolvedEntry, `could not resolve entry ${id}`);
+
+		// 		if (id === resolvedEntry.id) {
+		// 			switch (event) {
+		// 				case "create":
+		// 					break;
+		// 				case "delete":
+		// 					break;
+		// 				case "update":
+		// 					break;
+		// 			}
+		// 		}
+		// 	},
+		// },
 	];
 }
 
-function frameworkEyeball(context: PluginContext): vite.Plugin {
+function eyeball(context: PluginContext): vite.Plugin {
 	return {
-		enforce: "pre",
 		name: "framework:eyeball",
+		enforce: "pre",
 		async resolveId(id, importer, { attributes }) {
-			const { entry } = context;
-
 			if (this.environment.name !== "ssr") return;
-			if (entry && importer !== entry) return;
 
-			if (id === "framework/eyeball") {
-				return "\0virtual:framework/eyeball";
+			if (id === "framework/virtual/eyeball") {
+				return "\0virtual:framework/virtual/eyeball";
 			}
 
 			if (
@@ -172,25 +193,23 @@ function frameworkEyeball(context: PluginContext): vite.Plugin {
 					`could not resolve ${id} from ${importer || "entry"}`,
 				);
 
-				return `\0virtual:framework/${attributes.type}:${resolved.id}`;
+				return `\0virtual:framework/virtual/${attributes.type}-binding:${resolved.id}`;
 			}
 		},
 		async load(id) {
-			if (this.environment.name !== "ssr") return;
-
-			if (id === "\0virtual:framework/eyeball") {
+			if (id === "\0virtual:framework/virtual/eyeball") {
 				const { cookieSecretKeys, entry } = context;
 				assert(entry, "plugin not initialized");
 
 				const [eyeballResolved, entryResolved] = await Promise.all([
-					this.resolve("framework/eyeball", undefined, {
+					this.resolve("framework/virtual/eyeball", undefined, {
 						skipSelf: true,
 					}),
 					this.resolve(entry, undefined, {
 						skipSelf: true,
 					}),
 				]);
-				assert(eyeballResolved?.id, "framework/eyeball not found");
+				assert(eyeballResolved?.id, "framework/virtual/eyeball not found");
 				assert(entryResolved?.id, `${entry} not found`);
 
 				let eyeballSource = await fsp.readFile(eyeballResolved.id, "utf8");
@@ -204,36 +223,56 @@ function frameworkEyeball(context: PluginContext): vite.Plugin {
 
 				return eyeballSource;
 			}
+		},
+	};
+}
 
-			if (id.startsWith("\0virtual:framework/service:")) {
-				const { bindingMeta, serviceBindingFactory } = context;
-				const filepath = id.slice(27);
+function services(context: PluginContext): vite.Plugin {
+	return {
+		name: "framework:services",
+		async load(id) {
+			if (id.startsWith("\0virtual:framework/virtual/service-binding:")) {
+				const { serviceBindingFactory } = context;
+				assert(serviceBindingFactory, "plugin not initialized");
+
+				const filepath = id.slice(43);
 				assert(fileExists(filepath), `${filepath} not found`);
 
-				let [workerSource, workerMeta] = await Promise.all([
-					this.resolve("framework/service", undefined, {
+				let [workerSource, meta] = await Promise.all([
+					this.resolve("framework/virtual/service-binding", undefined, {
 						skipSelf: true,
 					}).then((workerResolved) => {
-						assert(workerResolved, "framework/service not found");
+						assert(
+							workerResolved?.id,
+							"framework/virtual/service-binding not found",
+						);
 						return fsp.readFile(workerResolved.id, "utf8");
 					}),
 					fsp.readFile(filepath, "utf8").then(async (source) => {
-						const meta = await parseServerTypes(source, filepath);
-						assert(meta.length === 1, "expected exactly one ServerEntry");
-						return meta[0];
+						const ext = path.extname(filepath);
+						const ast = await astGrep.parseAsync(
+							(ext === ".tsx"
+								? "Tsx"
+								: "TypeScript") as unknown as astGrep.Lang,
+							source,
+						);
+
+						const entries = await extractServerEntries(ast, filepath);
+						const defaultEntry = entries.find(
+							(entry) => entry.exportedName === "default",
+						);
+						assert(
+							defaultEntry,
+							"expected a ServerEntry to be exported as default",
+						);
+						const entry = entries[0];
+						return {
+							name: entry.name ?? filepathToBindingName(filepath, ext),
+						};
 					}),
 				]);
 
-				assert(bindingMeta, "plugin not initialized");
-				const binding = bindingMeta[workerMeta.name] ?? [];
-				binding.push(...workerMeta.dependencies);
-				bindingMeta[workerMeta.name] = binding;
-
-				const meta: ServiceBindingFactoryMeta = {
-					name: workerMeta.name,
-				};
-
-				workerSource = `import serviceBindingFactory from ${JSON.stringify(serviceBindingFactory)}\n${workerSource}`;
+				workerSource = `import serviceBindingFactory from ${JSON.stringify(serviceBindingFactory)};\n${workerSource}`;
 				workerSource = workerSource.replace(
 					'"__SERVICE_BINDING_FACTORY_ARGS__"',
 					JSON.stringify(meta),
@@ -241,13 +280,98 @@ function frameworkEyeball(context: PluginContext): vite.Plugin {
 
 				return workerSource;
 			}
+		},
+	};
+}
 
-			if (id.startsWith("\0virtual:framework/react-service:")) {
-				const filepath = id.slice(34);
+function reactServices(context: PluginContext): vite.Plugin {
+	return {
+		name: "framework:react-services",
+		async load(id) {
+			if (id.startsWith("\0virtual:framework/virtual/react-service-binding:")) {
+				const { serviceBindingFactory } = context;
+				assert(serviceBindingFactory, "plugin not initialized");
+
+				const filepath = id.slice(49);
 				assert(fileExists(filepath), `${filepath} not found`);
 
-				return `export default "Hello, React Service!";`;
+				let [workerSource, meta] = await Promise.all([
+					this.resolve("framework/virtual/react-service-binding", undefined, {
+						skipSelf: true,
+					}).then((workerResolved) => {
+						assert(
+							workerResolved?.id,
+							"framework/virtual/react-service-binding not found",
+						);
+						return fsp.readFile(workerResolved.id, "utf8");
+					}),
+					fsp.readFile(filepath, "utf8").then(async (source) => {
+						const ext = path.extname(filepath);
+						const ast = await astGrep.parseAsync(
+							(ext === ".tsx"
+								? "Tsx"
+								: "TypeScript") as unknown as astGrep.Lang,
+							source,
+						);
+
+						const entry = await extractReactServerEntry(ast, filepath);
+						assert(
+							entry,
+							`could not parse react server entry from file ${filepath}`,
+						);
+						return {
+							name: entry.name ?? filepathToBindingName(filepath, ext),
+						};
+					}),
+				]);
+
+				workerSource = `import serviceBindingFactory from ${JSON.stringify(serviceBindingFactory)};\n${workerSource}`;
+				workerSource = workerSource.replace(
+					'"__SERVICE_BINDING_FACTORY_ARGS__"',
+					JSON.stringify(meta),
+				);
+
+				return workerSource;
 			}
+		},
+	};
+}
+
+function dependencies(context: PluginContext): vite.Plugin {
+	return {
+		name: "framework:dependencies",
+		enforce: "pre",
+		config(userConfig) {
+			return vite.mergeConfig<vite.UserConfig, vite.UserConfig>(
+				{
+					esbuild: {},
+				},
+				userConfig,
+			);
+		},
+		async transform(code, id) {
+			const { environmentDependencies } = context;
+			assert(environmentDependencies, "plugin not initialized");
+
+			const ext = path.extname(id);
+			if ((ext !== ".ts" && ext !== ".tsx") || !fileExists(id)) return;
+
+			const ast = await astGrep.parseAsync(
+				(ext === ".ts" ? "TypeScript" : "Tsx") as unknown as astGrep.Lang,
+				code,
+			);
+
+			try {
+				const entries = await extractServerEntries(ast, id);
+				// biome-ignore lint/suspicious/noAssignInExpressions: <explanation>
+				const deps = (environmentDependencies[this.environment.name] ??=
+					new Set());
+				for (const entry of entries) {
+					for (const dep of entry.dependencies) {
+						deps.add(dep);
+					}
+				}
+			} catch (reason) {}
 		},
 	};
 }
@@ -259,25 +383,31 @@ function frameworkBuildMeta(context: PluginContext): vite.Plugin {
 		async closeBundle() {
 			if (this.environment.name !== "ssr") return;
 			console.log("closing bundle");
-			const { buildMetaPromise } = context;
-			assert(buildMetaPromise, "plugin not initialized");
+			const { buildMetaPromise, environmentDependencies } = context;
+			assert(
+				buildMetaPromise && environmentDependencies,
+				"plugin not initialized",
+			);
+
 			const bindings: BindingsMeta = {};
-			for (const [name, dependencies] of Object.entries(context.bindingMeta)) {
-				bindings[name] = Array.from(new Set(dependencies));
+			for (const [name, dependencies] of Object.entries(
+				environmentDependencies,
+			)) {
+				bindings[name] = Array.from(dependencies);
 			}
 			buildMetaPromise.resolve({ bindings });
 		},
 		async resolveId(id) {
 			if (this.environment.name !== "meta") return;
 
-			if (id === "framework/build-meta") {
-				return "\0virtual:framework/build-meta";
+			if (id === "framework/virtual/build-meta") {
+				return "\0virtual:framework/virtual/build-meta";
 			}
 		},
 		async load(id) {
 			if (this.environment.name !== "meta") return;
 
-			if (id === "\0virtual:framework/build-meta") {
+			if (id === "\0virtual:framework/virtual/build-meta") {
 				const { buildMetaPromise } = context;
 				assert(buildMetaPromise, "plugin not initialized");
 				const buildMeta = await buildMetaPromise.promise;
@@ -286,159 +416,6 @@ function frameworkBuildMeta(context: PluginContext): vite.Plugin {
 			}
 		},
 	};
-}
-
-function frameworkDurable({
-	storage,
-}: { storage: StorageConfig }): vite.Plugin {
-	return {
-		enforce: "pre",
-		name: "framework:durable",
-	};
-}
-
-export type BindingMeta = {
-	name: string;
-	dependencies: string[];
-};
-
-async function parseServerTypes(
-	source: string,
-	filename: string,
-): Promise<BindingMeta[]> {
-	const ext = path.extname(filename);
-	const parsed = await astGrep.parseAsync(
-		(ext === ".tsx" ? "Tsx" : "TypeScript") as unknown as astGrep.Lang,
-		source,
-	);
-	const allServers = parsed.root().findAll({
-		rule: {
-			any: [
-				{
-					kind: "string_fragment",
-					inside: {
-						kind: "string",
-						inside: {
-							kind: "literal_type",
-							nthChild: 1,
-							inside: {
-								kind: "type_arguments",
-								follows: {
-									kind: "identifier",
-									pattern: "ServerEntry",
-								},
-							},
-						},
-					},
-				},
-				{
-					kind: "predefined_type",
-					nthChild: 1,
-					inside: {
-						kind: "type_arguments",
-						follows: {
-							kind: "identifier",
-							pattern: "ServerEntry",
-						},
-					},
-				},
-			],
-		},
-	});
-
-	const allDependencies = parsed.root().findAll({
-		rule: {
-			any: [
-				{
-					kind: "string_fragment",
-					inside: {
-						kind: "string",
-						inside: {
-							kind: "literal_type",
-							nthChild: 2,
-							inside: {
-								kind: "type_arguments",
-								follows: {
-									kind: "identifier",
-									pattern: "ServerEntry",
-								},
-							},
-						},
-					},
-				},
-				{
-					kind: "union_type",
-					inside: {
-						kind: "type_arguments",
-						follow: {
-							kind: "identifier",
-							pattern: "ServerEntry",
-						},
-					},
-				},
-				{
-					kind: "predefined_type",
-					nthChild: 2,
-					inside: {
-						kind: "type_arguments",
-						follows: {
-							kind: "identifier",
-							pattern: "ServerEntry",
-						},
-					},
-				},
-			],
-		},
-	});
-
-	assert(
-		allServers.length === allDependencies.length,
-		"one or more ServerEntry generics are misconfigured",
-	);
-
-	const meta: BindingMeta[] = [];
-	for (let i = 0; i < allServers.length; i++) {
-		const serverTypeNode = allServers[0];
-		let name = serverTypeNode.text();
-		name =
-			name === "never"
-				? `${filepathToBindingName(filename, ext)}_SERVICE`
-				: name;
-
-		const dependencyTypeNode = allDependencies[0];
-		const dependencies: string[] = [];
-		switch (dependencyTypeNode.kind()) {
-			case "string_fragment":
-				dependencies.push(dependencyTypeNode.text());
-				break;
-			case "predefined_type":
-				assert(
-					dependencyTypeNode.text() === "never",
-					`expected never or string, got ${dependencyTypeNode.kind()}`,
-				);
-				break;
-			case "union_type":
-				for (const child of dependencyTypeNode.children()) {
-					if (child.kind() !== "literal_type") continue;
-					const stringNode = child.find({ rule: { kind: "string_fragment" } });
-					assert(
-						stringNode?.kind() === "string_fragment",
-						`expected never or string, got ${stringNode?.kind()}`,
-					);
-
-					dependencies.push(stringNode.text());
-				}
-				break;
-			default:
-				throw new Error(
-					`Unexpected ServerEntry dependency kind ${dependencyTypeNode.kind()}`,
-				);
-		}
-
-		meta.push({ name, dependencies });
-	}
-
-	return meta;
 }
 
 type ResolveFunction = (
@@ -479,7 +456,6 @@ function fileExists(filepath: string) {
 
 function filepathToBindingName(filepath: string, ext: string) {
 	const base = path.basename(filepath, ext ?? path.extname(filepath));
-	console.log({ filepath, base });
 	const binding = base
 		.replace(/[^A-Z0-9]/gi, "_")
 		.toUpperCase()

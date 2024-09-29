@@ -9,7 +9,7 @@ import { validateProfileInput } from "~/lib.js";
 // I execute on the eyeball worker before delegating the request to the
 // service binding for this route.
 export function eyeball() {
-	const c = getContext<Environment>();
+	const c = getContext();
 
 	const userId = c.cookie.get("userId");
 	if (!userId) {

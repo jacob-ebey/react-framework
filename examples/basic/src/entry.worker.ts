@@ -30,10 +30,6 @@ declare module "framework" {
 
 export default class extends ServerEntry<never, EnvironmentKeys> {
 	async fetch(request: Request) {
-		const t = await import("./api/profile.js", {
-			with: { type: "worker" },
-		});
-
 		return handleRequest(request, this, [
 			{
 				id: "shell",

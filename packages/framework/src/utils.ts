@@ -1,5 +1,11 @@
-export function assert<T>(condition: T, message?: string): asserts condition {
+export function assert<T>(
+	condition: T,
+	message?: string | (() => string),
+): asserts condition {
 	if (!condition) {
-		throw new Error(message ?? "Assertion failed");
+		throw new Error(
+			(typeof message === "function" ? message() : message) ??
+				"Assertion failed",
+		);
 	}
 }

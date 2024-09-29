@@ -8,20 +8,15 @@
 			"types": "./dist/framework.d.ts",
 			"default": "./dist/framework.js"
 		},
-		"./build-meta": {
-			"source": "./src/build-meta.ts",
-			"types": "./dist/build-meta.d.ts",
-			"default": "./dist/build-meta.js"
-		},
 		"./cloudflare": {
 			"source": "./src/cloudflare.ts",
 			"types": "./dist/cloudflare.d.ts",
 			"default": "./dist/cloudflare.js"
 		},
-		"./eyeball": {
-			"source": "./src/eyeball.ts",
-			"types": "./dist/eyeball.d.ts",
-			"default": "./dist/eyeball.js"
+		"./compiler": {
+			"source": "./src/compiler.ts",
+			"types": "./dist/compiler.d.ts",
+			"default": "./dist/compiler.js"
 		},
 		"./node/service-binding-factory": {
 			"source": "./src/node/service-binding-factory.ts",
@@ -33,15 +28,30 @@
 			"types": "./dist/router.d.ts",
 			"default": "./dist/router.js"
 		},
-		"./service": {
-			"source": "./src/service.ts",
-			"types": "./dist/service.d.ts",
-			"default": "./dist/service.js"
-		},
 		"./utils": {
 			"source": "./src/utils.ts",
 			"types": "./dist/utils.d.ts",
 			"default": "./dist/utils.js"
+		},
+		"./virtual/build-meta": {
+			"source": "./src/virtual/build-meta.ts",
+			"types": "./dist/virtual/build-meta.d.ts",
+			"default": "./dist/virtual/build-meta.js"
+		},
+		"./virtual/eyeball": {
+			"source": "./src/virtual/eyeball.ts",
+			"types": "./dist/virtual/eyeball.d.ts",
+			"default": "./dist/virtual/eyeball.js"
+		},
+		"./virtual/react-service-binding": {
+			"source": "./src/virtual/react-service-binding.ts",
+			"types": "./dist/virtual/react-service-binding.d.ts",
+			"default": "./dist/virtual/react-service-binding.js"
+		},
+		"./virtual/service-binding": {
+			"source": "./src/virtual/service-binding.ts",
+			"types": "./dist/virtual/service-binding.d.ts",
+			"default": "./dist/virtual/service-binding.js"
 		},
 		"./vite": {
 			"source": "./src/vite.ts",
@@ -57,6 +67,8 @@
 	},
 	"scripts": {
 		"build": "tsc",
+		"node": "node --no-warnings --conditions source --loader tsm",
+		"test": "node --no-warnings --conditions source --loader tsm --test src/**/*.spec.ts",
 		"watch": "tsc -w"
 	},
 	"peerDependencies": {
@@ -80,6 +92,7 @@
 		"@types/node": "22.7.2",
 		"@types/react": "18.3.9",
 		"react": "19.0.0-rc-204a551e-20240926",
+		"tsm": "2.3.0",
 		"typescript": "5.6.2",
 		"vite": "6.0.0-beta.1"
 	}

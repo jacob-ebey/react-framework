@@ -68,7 +68,7 @@
 	"scripts": {
 		"build": "tsc",
 		"node": "node --no-warnings --conditions source --loader tsm",
-		"test": "node --no-warnings --conditions source --loader tsm --test src/**/*.spec.ts",
+		"test": "node --no-warnings --conditions source --loader tsm --test src/*.spec.ts",
 		"watch": "tsc -w"
 	},
 	"peerDependencies": {

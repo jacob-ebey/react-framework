@@ -8,6 +8,7 @@ import type { BindingsMeta, BuildMeta } from "framework/virtual/build-meta";
 import { assert } from "framework/utils";
 import {
 	extractImportAttributes,
+	extractDurableEntries,
 	extractReactServerEntry,
 	extractServerEntries,
 } from "framework/compiler";
@@ -104,7 +105,7 @@ export default function framework({
 		{
 			name: "framework:setup",
 			enforce: "pre",
-			async config(userConfig, { mode }) {
+			async config({ builder: userBuilder, ...userConfig }, { mode }) {
 				if (initialized) return;
 				if (!global.initializePromise) {
 					global.initializePromise = initialize(
@@ -123,7 +124,6 @@ export default function framework({
 						builder: {
 							async buildApp(builder) {
 								await builder.build(builder.environments.ssr);
-								await builder.build(builder.environments.meta);
 
 								await Promise.all([
 									...(services.service ?? []).map((_, i) =>
@@ -133,6 +133,26 @@ export default function framework({
 										builder.build(builder.environments[`REACT_SERVICE_${i}`]),
 									),
 								]);
+
+								if (userBuilder?.buildApp) {
+									await userBuilder.buildApp(builder);
+								}
+
+								const { buildMetaPromise, environmentDependencies } = context;
+								assert(
+									buildMetaPromise && environmentDependencies,
+									"plugin not initialized",
+								);
+
+								const bindings: BindingsMeta = {};
+								for (const [name, dependencies] of Object.entries(
+									environmentDependencies,
+								)) {
+									bindings[name] = Array.from(dependencies);
+								}
+								buildMetaPromise.resolve({ bindings });
+
+								await builder.build(builder.environments.meta);
 							},
 						},
 						build: {
@@ -411,7 +431,10 @@ function dependencies(context: PluginContext): vite.Plugin {
 			);
 
 			try {
-				const entries = await extractServerEntries(ast, id);
+				const serverEntries = await extractServerEntries(ast, id);
+				const durableEntries = await extractDurableEntries(ast, id);
+				console.log({ id, env: this.environment.name, durableEntries });
+				const entries = [...serverEntries, ...durableEntries];
 				// biome-ignore lint/suspicious/noAssignInExpressions: <explanation>
 				const deps = (environmentDependencies[this.environment.name] ??=
 					new Set());
@@ -420,6 +443,7 @@ function dependencies(context: PluginContext): vite.Plugin {
 						deps.add(dep);
 					}
 				}
+				console.log(environmentDependencies);
 			} catch (reason) {}
 		},
 	};
@@ -429,23 +453,6 @@ function frameworkBuildMeta(context: PluginContext): vite.Plugin {
 	return {
 		enforce: "pre",
 		name: "framework:build-meta",
-		async closeBundle() {
-			if (this.environment.name !== "ssr") return;
-			console.log("closing bundle");
-			const { buildMetaPromise, environmentDependencies } = context;
-			assert(
-				buildMetaPromise && environmentDependencies,
-				"plugin not initialized",
-			);
-
-			const bindings: BindingsMeta = {};
-			for (const [name, dependencies] of Object.entries(
-				environmentDependencies,
-			)) {
-				bindings[name] = Array.from(dependencies);
-			}
-			buildMetaPromise.resolve({ bindings });
-		},
 		async resolveId(id) {
 			if (this.environment.name !== "meta") return;
 

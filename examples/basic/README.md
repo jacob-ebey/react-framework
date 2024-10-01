@@ -1,3 +1,5 @@
+<img width="1005" alt="image" src="https://github.com/user-attachments/assets/ed8eb0ad-f97f-47e3-91fd-340530e0ff86">
+
 ```mermaid
 sequenceDiagram
     Browser->>Eyeball: Request
